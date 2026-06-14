@@ -23,10 +23,12 @@ if (!url) {
   process.exit(1);
 }
 
-// Only a connection-level failure should be retried (e.g. `up -d` then immediate
-// db:migrate racing first-boot Postgres). A real SQL/DDL error in a migration is
-// deterministic — retrying it 5× just buries the message, so fail fast on those.
-const CONNECTION_ERROR_CODES = new Set([
+// Only a *transient* failure should be retried (e.g. `up -d` then immediate db:migrate
+// racing first-boot Postgres, or a just-restarted DB replaying WAL in recovery mode). A
+// real SQL/DDL error is deterministic — retrying it 5× just buries the message, so fail
+// fast on those. Covers Node socket errors, Postgres class-08 connection exceptions, and
+// 57P03 (cannot_connect_now / server starting up / in recovery).
+const RETRYABLE_CODES = new Set([
   "ECONNREFUSED",
   "ECONNRESET",
   "ENOTFOUND",
@@ -35,6 +37,11 @@ const CONNECTION_ERROR_CODES = new Set([
   "CONNECT_TIMEOUT",
   "CONNECTION_CLOSED",
   "CONNECTION_ENDED",
+  "57P03", // cannot_connect_now (server in recovery / still starting)
+  "08000", // connection_exception
+  "08006", // connection_failure
+  "08001", // sqlclient_unable_to_establish_sqlconnection
+  "08004", // sqlserver_rejected_establishment_of_sqlconnection
 ]);
 
 async function run(): Promise<void> {
@@ -49,7 +56,7 @@ async function run(): Promise<void> {
     } catch (err) {
       await client.end({ timeout: 5 }).catch(() => {});
       const code = (err as { code?: string }).code;
-      const retryable = code !== undefined && CONNECTION_ERROR_CODES.has(code);
+      const retryable = code !== undefined && RETRYABLE_CODES.has(code);
       if (attempt === maxAttempts || !retryable) throw err; // surface the real error
       console.warn(`DB not ready (attempt ${attempt}/${maxAttempts}: ${code}); retrying...`);
       await new Promise((r) => setTimeout(r, 1000));

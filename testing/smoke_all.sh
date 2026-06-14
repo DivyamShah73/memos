@@ -10,7 +10,7 @@ cd "$ROOT" || exit 1
 
 echo "=== MemOS smoke suite ==="
 bash testing/phase0.sh   # repo + infra skeleton
-# bash testing/phase1.sh   # auth + enroll        (added in Phase 1)
+bash testing/phase1.sh   # gateway core + auth + enroll
 # bash testing/phase2.sh   # workflow + checkin   (added in Phase 2)
 # bash testing/phase3.sh   # evidence gate        (added in Phase 3)
 # bash testing/phase4.sh   # query                (added in Phase 4)
