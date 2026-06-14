@@ -4,10 +4,12 @@
  * via the scaffold-intent skill.
  */
 import type { ZodTypeAny } from "zod";
-import { enrollInputSchema } from "@memos/shared";
+import { checkinInputSchema, enrollInputSchema, workflowCreateInputSchema } from "@memos/shared";
 import type { IntentContext } from "./context.js";
 import type { Envelope } from "./envelope.js";
 import { enroll } from "../intents/agent.enroll.js";
+import { workflowCreate } from "../intents/workflow.create.js";
+import { checkin } from "../intents/checkin.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -25,6 +27,22 @@ export const registry = new Map<string, IntentDef>([
       schema: enrollInputSchema,
       handler: enroll as IntentDef["handler"],
       requiresAuth: false,
+    },
+  ],
+  [
+    "workflow.create",
+    {
+      schema: workflowCreateInputSchema,
+      handler: workflowCreate as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "checkin",
+    {
+      schema: checkinInputSchema,
+      handler: checkin as IntentDef["handler"],
+      requiresAuth: true,
     },
   ],
 ]);
