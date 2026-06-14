@@ -9,6 +9,7 @@ import type { EnrollInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { generateToken, hashToken } from "../core/auth.js";
+import { isUniqueViolation } from "../core/pgerrors.js";
 import { agents, enrollmentCodes } from "../db/schema.js";
 
 /** Slug for the agent id: lowercase, [a-z0-9-] only, collapsed, capped (no prefix-spoof). */
@@ -19,10 +20,6 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
   return s || "agent";
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (err as { code?: string })?.code === "23505";
 }
 
 export async function enroll(ctx: IntentContext, input: EnrollInput): Promise<Envelope> {

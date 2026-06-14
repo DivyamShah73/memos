@@ -11,6 +11,8 @@ import { registry } from "./registry.js";
 import { ERROR_TYPE, fail, statusFor, type Envelope } from "./envelope.js";
 import { extractBearer, resolveAgent, type AuthedAgent } from "./auth.js";
 import { checkRateLimit } from "./ratelimit.js";
+import { makeWithScope } from "./scope.js";
+import type { IntentContext } from "./context.js";
 import { gatewayDb } from "../db/gateway.js";
 
 export interface DispatchInput {
@@ -89,11 +91,10 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
     const result = entry.schema.safeParse(parsed);
     if (!result.success) return done(validationEnvelope(result.error));
 
-    // 6. Handler.
-    const body = await entry.handler(
-      { agent, db: gatewayDb, clientIp: input.clientIp },
-      result.data as never,
-    );
+    // 6. Handler. Authed intents get an agent-bound `withScope` for RLS-protected tables.
+    const ctx: IntentContext = { agent, db: gatewayDb, clientIp: input.clientIp };
+    if (agent) ctx.withScope = makeWithScope(gatewayDb, agent.scopes);
+    const body = await entry.handler(ctx, result.data as never);
     return done(body);
   } catch (err) {
     console.error(`dispatch error for intent ${input.name}:`, err);
