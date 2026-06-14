@@ -138,3 +138,21 @@ DB-integration files run sequentially via `fileParallelism:false` to avoid fixtu
 `testing/phase2.sh` passes the full loop over HTTP (enroll → workflow.create bound to an
 objective → start/complete checkins → run closed; unbound workflow rejected). `smoke_all`
 now chains phases 0–2.
+
+**Code-review pass** (xhigh) caught a real cluster in the provenance spine — all fixed: (1)
+**the alarming one** — `target_objective_id` was only validated inside `if (okrs_required)`, so
+on a non-okrs project a supplied objective was inserted unchecked; a *foreign-tenant* objective
+UUID passes the FK (FK checks bypass RLS) → a cross-tenant provenance binding (invariants #3/#4),
+and a non-existent UUID → FK 23503 → uncaught → 500. Fix: validate the objective **whenever
+supplied**, in-scope — a foreign objective is RLS-invisible (→ "not found", no binding) and a
+bogus one is a clean business error. (2) `checkins.target_objective_id` had **no FK** (unlike
+`workflow_runs`) → added it (migration 0005) as a DB backstop. (3) checkin compared the UUID
+with case-sensitive JS `!==` vs Postgres's lowercase → an uppercase UUID wrongly rejected; now
+lowercased. (4) checkin gated on the **live `projects.okrs_required` flag** → flipping it
+mid-run bricked an open run forever; now the objective rule **derives from the run's binding**
+(immutable since creation), and checkin no longer reads `projects` at all (one fewer round-trip).
+(5) **TOCTOU** on close — a non-locking read + unconditional UPDATE let concurrent terminal
+checkins double-close; now `SELECT … FOR UPDATE` + a `status='open'` guard on the close. checkin
+also now stores the run's canonical objective on the checkin (always valid). Re-verified: 29
+tests (added cross-tenant-binding rejection, non-okrs validation, concurrent-close
+serialization), typecheck clean, `smoke_all` green.

@@ -109,7 +109,7 @@ workflow_runs ( bd_id text pk,              -- 'memos-<short>' (generate short i
 checkins ( id uuid pk,
            bd_id → workflow_runs,
            project_id → projects,
-           target_objective_id uuid null,
+           target_objective_id uuid null → objectives,  -- FK backstop (mirrors the run's objective)
            status text,                     -- start | progress | blocked | complete | failed
            current_task text,
            created_at )

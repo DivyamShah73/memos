@@ -86,6 +86,21 @@ describe("checkin", () => {
     expect(json.error).toMatch(/already closed/);
   });
 
+  it("serializes concurrent terminal checkins — exactly one closes the run", async () => {
+    const bd = await openRun();
+    await call("checkin", token, { project_id: P, bd_id: bd, status: "start" });
+    const [a, b] = await Promise.all([
+      call("checkin", token, { project_id: P, bd_id: bd, status: "complete" }),
+      call("checkin", token, { project_id: P, bd_id: bd, status: "complete" }),
+    ]);
+    const oks = [a, b].filter((r) => r.json.ok === true).length;
+    const closed = [a, b].filter(
+      (r) => r.json.ok === false && /already closed/.test(r.json.error),
+    ).length;
+    expect(oks).toBe(1);
+    expect(closed).toBe(1);
+  });
+
   it("requires the matching target_objective_id on okrs_required projects", async () => {
     const bd = await openRun(P_OKR, objId);
     const missing = await call("checkin", token, { project_id: P_OKR, bd_id: bd, status: "start" });

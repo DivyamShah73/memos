@@ -48,13 +48,13 @@ export async function workflowCreate(
     const bdId = newBdId();
     try {
       const result: TxResult = await withScope(async (tx): Promise<TxResult> => {
-        if (okrsRequired) {
-          if (!target_objective_id) {
-            return { kind: "validation", message: "target_objective_id is required on this project" };
-          }
-          // objectives IS RLS'd — this read MUST be inside the scoped tx or it false-negatives.
-          // A missing and a foreign-tenant objective are indistinguishable here (both 0 rows),
-          // which is desirable: one message, no cross-tenant existence leak.
+        // Validate the objective WHENEVER one is supplied — on any project, not just
+        // okrs_required. objectives IS RLS'd, so this in-scope read makes a foreign-tenant
+        // objective invisible (→ "not found", no cross-tenant binding) and turns a
+        // non-existent id into a clean business error instead of an FK 23503 → 500. A
+        // missing and a foreign objective are indistinguishable here (both 0 rows) — by
+        // design: one message, no cross-tenant existence leak.
+        if (target_objective_id) {
           const obj = await tx
             .select({ status: objectives.status })
             .from(objectives)
@@ -66,6 +66,9 @@ export async function workflowCreate(
           if (obj[0].status === "abandoned") {
             return { kind: "validation", message: "target_objective_id is abandoned; cannot bind" };
           }
+        }
+        if (okrsRequired && !target_objective_id) {
+          return { kind: "validation", message: "target_objective_id is required on this project" };
         }
 
         await tx.insert(workflowRuns).values({

@@ -71,6 +71,18 @@ describe("workflow.create", () => {
     expect(json.error).toMatch(/cannot bind/);
   });
 
+  it("validates a supplied objective even on a non-okrs project (clean error, not FK 500)", async () => {
+    const { status, json } = await call("workflow.create", token, {
+      project_id: P, // okrs_required = false
+      workflow_class: "x",
+      title: "t",
+      target_objective_id: "00000000-0000-4000-8000-000000000000", // valid uuid, doesn't exist
+    });
+    expect(status).toBe(200);
+    expect(json.ok).toBe(false);
+    expect(json.error).toMatch(/not found in this project/);
+  });
+
   it("rejects an out-of-scope project with 403", async () => {
     const { status, json } = await call("workflow.create", token, {
       project_id: "project.vitest-not-mine",

@@ -1,14 +1,18 @@
 /**
  * checkin — records a state change on a workflow run (start→…→complete/failed). Terminal
- * statuses close the run. The run lookup runs inside the agent's RLS scope, so another
- * tenant's run is invisible ("unknown workflow run").
+ * statuses close the run. The run lookup runs inside the agent's RLS scope (another tenant's
+ * run is invisible → "unknown workflow run") and `FOR UPDATE` serializes concurrent checkins
+ * so two terminal ones can't double-close.
+ *
+ * The objective rule derives from the RUN's binding (fixed at creation), NOT the live
+ * `projects.okrs_required` flag — so flipping that flag can never strand an open run.
  */
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { CheckinInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
-import { checkins, projects, workflowRuns } from "../db/schema.js";
+import { checkins, workflowRuns } from "../db/schema.js";
 
 type TxResult = { kind: "error"; message: string } | { kind: "ok"; checkinId: string };
 
@@ -23,17 +27,15 @@ export async function checkin(ctx: IntentContext, input: CheckinInput): Promise<
     return fail(`project ${project_id} is not in scope`, ERROR_TYPE.forbidden);
   }
 
-  const proj = await ctx.db
-    .select({ okrsRequired: projects.okrsRequired })
-    .from(projects)
-    .where(eq(projects.id, project_id))
-    .limit(1);
-  if (proj.length === 0) return fail("unknown project", ERROR_TYPE.badRequest);
-  const okrsRequired = proj[0].okrsRequired;
+  // uuid columns read back canonical lowercase; normalize the input so the match is
+  // case-insensitive (z.string().uuid() accepts upper/mixed case unchanged).
+  const want = target_objective_id ? target_objective_id.toLowerCase() : null;
 
   try {
     const result: TxResult = await withScope(async (tx): Promise<TxResult> => {
-      // RLS USING makes another tenant's run invisible → 0 rows → "unknown workflow run".
+      // FOR UPDATE locks the run row for this tx: a concurrent terminal checkin blocks here
+      // until we commit, then sees status='complete' → "already closed" (closes the TOCTOU).
+      // RLS USING still hides another tenant's run (0 rows → "unknown workflow run").
       const runs = await tx
         .select({
           projectId: workflowRuns.projectId,
@@ -42,35 +44,43 @@ export async function checkin(ctx: IntentContext, input: CheckinInput): Promise<
         })
         .from(workflowRuns)
         .where(eq(workflowRuns.bdId, bd_id))
+        .for("update")
         .limit(1);
       if (runs.length === 0) return { kind: "error", message: "unknown workflow run" };
       const run = runs[0];
-      // An agent scoped to >1 project must not checkin under project A against a run in B.
+      // An agent scoped to >1 project must not checkin under project A against a B run.
       if (run.projectId !== project_id) return { kind: "error", message: "unknown workflow run" };
       if (run.status !== "open") return { kind: "error", message: "workflow run already closed" };
 
-      // Hard rule #2: every checkin on an okrs_required project repeats the run's objective.
-      if (okrsRequired && (!target_objective_id || target_objective_id !== run.targetObjectiveId)) {
-        return { kind: "error", message: "target_objective_id is required on this project" };
+      if (run.targetObjectiveId !== null) {
+        // Bound run: the checkin must repeat the run's objective (hard rule #2).
+        if (want === null) return { kind: "error", message: "target_objective_id is required for this run" };
+        if (want !== run.targetObjectiveId) {
+          return { kind: "error", message: "target_objective_id does not match the run's objective" };
+        }
+      } else if (want !== null) {
+        return { kind: "error", message: "this run is not bound to an objective" };
       }
 
+      // Store the run's canonical objective (always a valid, in-project objective), so the
+      // checkin's provenance column can never drift or point at a foreign/garbage id.
       const inserted = await tx
         .insert(checkins)
         .values({
           bdId: bd_id,
           projectId: project_id,
-          targetObjectiveId: target_objective_id ?? null,
+          targetObjectiveId: run.targetObjectiveId,
           status,
           currentTask: current_task ?? null,
         })
         .returning({ id: checkins.id });
 
-      // Terminal status closes the run (atomically with the checkin).
       if (status === "complete" || status === "failed") {
+        // Conditional on status='open' as a second guard alongside FOR UPDATE.
         await tx
           .update(workflowRuns)
           .set({ status, closedAt: sql`now()` })
-          .where(eq(workflowRuns.bdId, bd_id));
+          .where(and(eq(workflowRuns.bdId, bd_id), eq(workflowRuns.status, "open")));
       }
       return { kind: "ok", checkinId: inserted[0].id };
     });

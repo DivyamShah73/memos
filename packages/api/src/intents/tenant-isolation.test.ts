@@ -6,7 +6,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { call, cleanupAndClose, enrollAgent, seedBase, seedProject } from "../_testutil.js";
+import {
+  call,
+  cleanupAndClose,
+  enrollAgent,
+  seedBase,
+  seedObjective,
+  seedProject,
+} from "../_testutil.js";
 import { gatewayDb } from "../db/gateway.js";
 import { makeWithScope } from "../core/scope.js";
 import { workflowRuns } from "../db/schema.js";
@@ -55,6 +62,20 @@ describe("tenant isolation", () => {
     });
     expect(json.ok).toBe(false);
     expect(json.error).toMatch(/unknown workflow run/);
+  });
+
+  it("agent A cannot bind a project-B objective (foreign objective is invisible → not found)", async () => {
+    // B's objective exists globally (FK would pass), but it's RLS-invisible to A's scope,
+    // so the in-scope validation rejects it — no cross-tenant provenance binding.
+    const bObjective = await seedObjective(B, "active");
+    const { json } = await call("workflow.create", tokenA, {
+      project_id: A, // okrs_required = false — the path that used to skip validation
+      workflow_class: "x",
+      title: "cross-bind attempt",
+      target_objective_id: bObjective,
+    });
+    expect(json.ok).toBe(false);
+    expect(json.error).toMatch(/not found in this project/);
   });
 
   it("GUC proof: a gateway read of A's run with NO scope set returns nothing (default-deny)", async () => {
