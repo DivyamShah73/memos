@@ -1,0 +1,7 @@
+{
+  "name": "@memos/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "$comment": "Placeholder. The agent client library + agents.md manifest are built in Phase 9. No typecheck/test script in Phase 0 so the root fan-out skips it."
+}

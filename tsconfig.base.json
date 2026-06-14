@@ -1,0 +1,17 @@
+{
+  "$comment": "Shared TS config. NodeNext (not Bundler) because api/workers/shared/sdk run under tsx/node as real ESM, so typecheck mirrors runtime resolution. Trade-off: relative ESM imports need explicit .js extensions. Next.js owns web's tsconfig separately.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "noEmit": true,
+    "types": []
+  }
+}

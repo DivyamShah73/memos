@@ -1,0 +1,7 @@
+{
+  "name": "@memos/workers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "$comment": "Placeholder. Async critics, DOK grader, and escalation sweeps are built from Phase 6. No typecheck/test script in Phase 0 so the root fan-out skips it."
+}

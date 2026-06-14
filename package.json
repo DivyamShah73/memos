@@ -1,0 +1,27 @@
+{
+  "name": "memos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:migrate": "pnpm --filter @memos/api run db:migrate",
+    "db:seed": "pnpm --filter @memos/api run db:seed",
+    "db:generate": "pnpm --filter @memos/api run db:generate",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "lint": "pnpm -r --if-present run lint",
+    "dev:api": "pnpm --filter @memos/api run dev",
+    "dev:web": "pnpm --filter @memos/web run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "drizzle-kit": "^0.30.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

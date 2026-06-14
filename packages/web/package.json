@@ -1,0 +1,7 @@
+{
+  "name": "@memos/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "$comment": "Placeholder. The Next.js 15 operator dashboard is built in Phase 7. Intentionally defines no typecheck/test script in Phase 0 so the root `pnpm -r --if-present` fan-out skips it and the exit gate stays green."
+}

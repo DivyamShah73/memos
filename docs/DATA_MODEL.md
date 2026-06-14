@@ -82,6 +82,7 @@ objectives ( id uuid pk,
 
 milestones ( id uuid pk,                     -- serves BOTH "key_result" and "milestone" roles
              objective_id → objectives,
+             project_id → projects,          -- denormalized from objective (see note below) for uniform RLS
              title, description,
              position int,
              status text default 'pending',  -- pending | achieved
@@ -169,11 +170,22 @@ questions ( id uuid pk, project_id, bd_id, agent_id,
 
 feedback ( id uuid pk, agent_id, bd_id, category text, body, created_at )
 
-choices ( id uuid pk, agent_id, bd_id, description,
+choices ( id uuid pk, agent_id, bd_id,
+          project_id → projects,            -- denormalized (see note below) for uniform RLS
+          description,
           outcome text null,                -- filled once known (loop-close)
           status text default 'open',       -- open | resolved
           created_at )
 ```
+
+> **Phase 0 schema note — denormalized `project_id` on `milestones` and `choices`.**
+> The spec scopes these two tables indirectly (milestones via `objective_id`, choices via
+> `bd_id`). The implementation adds a denormalized `project_id` to both so the uniform
+> `project_id`-keyed RLS policy template (§4) applies without a join/subquery, honoring the
+> "every tenant-scoped table carries `project_id`" rule. `questions` already carries it;
+> `feedback` is intentionally agent-scoped (can concern the platform itself) and is
+> handler-enforced, not project-RLS'd. The canonical schema is
+> `packages/api/src/db/schema.ts`; this doc is kept in sync with it.
 
 ---
 
@@ -208,20 +220,42 @@ create index on learnings using gin (to_tsvector('english', claim));
 
 ## 4. Row-Level Security (the isolation boundary)
 
-Isolation lives here, not in handlers. Per request the gateway runs
+Isolation lives here, not in handlers. **Roles are separated:** migrations run as the
+owner/superuser; the gateway connects at runtime as the non-owner role `memos_app`. Per
+request the gateway runs
 `select set_config('memos.agent_projects', '{project.a,project.b}', true);`
-derived from the authed token's `scopes`. Then every tenant-scoped table:
+derived from the authed token's `scopes`. Then every tenant-scoped table gets `ENABLE`
+**and `FORCE`** row level security plus four policies (the owner bypasses non-forced RLS,
+so `FORCE` is what makes it real — see `docs/decisions/002`):
 
 ```sql
 alter table facts enable row level security;
+alter table facts force  row level security;
 
-create policy facts_read on facts for select
+create policy facts_select on facts for select
+  using (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+create policy facts_insert on facts for insert
+  with check (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+create policy facts_update on facts for update
+  using      (project_id = any (current_setting('memos.agent_projects', true)::text[]))
+  with check (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+create policy facts_delete on facts for delete
   using (project_id = any (current_setting('memos.agent_projects', true)::text[]));
 
-create policy facts_write on facts for insert
-  with check (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+grant select, insert, update, delete on facts to memos_app;
 ```
-Repeat for `learnings`, `artifacts`, `workflow_runs`, `checkins`, `objectives`, `milestones`, `questions`, `choices`. Briefs are readable if the agent's identity matches the brief's `target_kind/target_id` (org/team/project/agent resolution).
+UPDATE needs both `using` (which rows are visible to update) and `with check` (what the new
+values may be) or a row could be moved into another tenant. Repeat the whole block for
+`learnings`, `artifacts`, `workflow_runs`, `checkins`, `objectives`, `milestones`,
+`questions`, `choices` (the 9 project-scoped tables). The canonical SQL is
+`infra/migrations/0002_rls.sql`.
+
+**Tables NOT under project_id RLS (Phase 0):** the control-plane tables `orgs, teams,
+projects, agents, enrollment_codes, brief_acks, feedback` are touched during enrollment/auth
+*before* a project scope exists — a `project_id` policy there would deadlock the gateway out
+of its own auth tables. `briefs` are identity-targeted (org/team/project/agent) and get a
+distinct identity policy in Phase 6; handler-enforced until then. All these still receive
+`memos_app` table GRANTs so the gateway can read/write them.
 
 **Deliberate exception:** cross-silo *learning* discovery (the whole value prop) is a curated read path that may span projects — implement it as a **separate, audited, problem-domain-tag-filtered** query that returns learnings only (never facts), with `evidence_artifact_id` and `non_obvious_marker` present. Treat unscoped access as privileged.
 
