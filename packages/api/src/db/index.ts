@@ -13,7 +13,9 @@ import * as schema from "./schema.js";
 
 const url = process.env.DATABASE_URL ?? "";
 
-// Lazily created so importing this module never throws when env is unset (e.g. typecheck).
+// postgres-js connects lazily (on first query), so constructing the client at import is
+// side-effect-free and won't throw when env is unset (e.g. during typecheck). If
+// DATABASE_URL is missing, the failure surfaces at the first query, not here.
 export const queryClient = postgres(url, { max: 10, onnotice: () => {} });
 export const db = drizzle(queryClient, { schema });
 

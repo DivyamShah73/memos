@@ -23,9 +23,21 @@ if (!url) {
   process.exit(1);
 }
 
+// Only a connection-level failure should be retried (e.g. `up -d` then immediate
+// db:migrate racing first-boot Postgres). A real SQL/DDL error in a migration is
+// deterministic — retrying it 5× just buries the message, so fail fast on those.
+const CONNECTION_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "CONNECT_TIMEOUT",
+  "CONNECTION_CLOSED",
+  "CONNECTION_ENDED",
+]);
+
 async function run(): Promise<void> {
-  // `up -d` followed immediately by db:migrate can race first-boot Postgres even after
-  // the healthcheck flips; retry the initial connection a few times.
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const client = postgres(url!, { max: 1, onnotice: () => {} });
@@ -36,11 +48,10 @@ async function run(): Promise<void> {
       return;
     } catch (err) {
       await client.end({ timeout: 5 }).catch(() => {});
-      const isLast = attempt === maxAttempts;
-      console.warn(
-        `Migration attempt ${attempt}/${maxAttempts} failed: ${(err as Error).message}`,
-      );
-      if (isLast) throw err;
+      const code = (err as { code?: string }).code;
+      const retryable = code !== undefined && CONNECTION_ERROR_CODES.has(code);
+      if (attempt === maxAttempts || !retryable) throw err; // surface the real error
+      console.warn(`DB not ready (attempt ${attempt}/${maxAttempts}: ${code}); retrying...`);
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
