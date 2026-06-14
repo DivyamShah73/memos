@@ -8,8 +8,10 @@ import { agents, enrollmentCodes, orgs, teams } from "../db/schema.js";
 
 // Fixtures are created with the OWNER client (bypasses RLS / GRANT gaps); the gateway
 // (app) reads/writes as memos_app. Both hit the live docker `memos` DB.
-const ORG_ID = "org";
-const TEAM_ID = "team.test";
+// Test-owned ids (NOT the shared 'org'/'team.demo' that phase1.sh leaves behind) so
+// teardown can never FK-collide with another harness's fixtures.
+const ORG_ID = "org.vitest";
+const TEAM_ID = "team.vitest";
 const TEST_SCOPES = ["project.demo"];
 
 function uniqueCode(): string {
@@ -48,11 +50,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await ownerDb.delete(agents).where(like(agents.displayName, "vitest-%"));
-  await ownerDb.delete(enrollmentCodes).where(like(enrollmentCodes.code, "enr_code_vitest_%"));
-  await ownerDb.delete(teams).where(eq(teams.id, TEAM_ID));
-  await ownerDb.delete(orgs).where(eq(orgs.id, ORG_ID));
-  await Promise.all([queryClient.end({ timeout: 5 }), gatewayClient.end({ timeout: 5 })]);
+  try {
+    // Only delete test-owned rows (vitest ids), in FK order. Nothing else references them.
+    await ownerDb.delete(agents).where(like(agents.displayName, "vitest-%"));
+    await ownerDb.delete(enrollmentCodes).where(like(enrollmentCodes.code, "enr_code_vitest_%"));
+    await ownerDb.delete(teams).where(eq(teams.id, TEAM_ID));
+    await ownerDb.delete(orgs).where(eq(orgs.id, ORG_ID));
+  } finally {
+    // Always close the pools, even if cleanup throws, so the run doesn't hang/leak.
+    await Promise.all([queryClient.end({ timeout: 5 }), gatewayClient.end({ timeout: 5 })]);
+  }
 });
 
 describe("agent.enroll", () => {
@@ -135,5 +142,13 @@ describe("agent.enroll", () => {
     expect(status).toBe(400);
     expect(json.ok).toBe(false);
     expect(json.error_type).toBe("validation_error");
+  });
+
+  it("rejects an oversized request body with 413 (OOM guard)", async () => {
+    // > the 8 MiB default cap; must be refused before buffering/handling.
+    const huge = "x".repeat(9 * 1024 * 1024);
+    const { status, json } = await post("agent.enroll", { code: "x", display_name: huge });
+    expect(status).toBe(413);
+    expect(json.ok).toBe(false);
   });
 });

@@ -10,7 +10,16 @@ interface Window {
 }
 
 const WINDOW_MS = 60_000;
+// Bound the Map so it can't grow without limit (one entry per distinct key forever).
+// When it hits the cap we sweep expired windows before inserting a new key.
+const MAX_BUCKETS = 50_000;
 const buckets = new Map<string, Window>();
+
+function sweepExpired(now: number): void {
+  for (const [k, w] of buckets) {
+    if (now >= w.resetAt) buckets.delete(k);
+  }
+}
 
 function limit(): number {
   if (process.env.VITEST || process.env.NODE_ENV === "test") return 1_000_000;
@@ -28,6 +37,7 @@ export function checkRateLimit(key: string): RateResult {
   const max = limit();
   const w = buckets.get(key);
   if (!w || now >= w.resetAt) {
+    if (buckets.size >= MAX_BUCKETS) sweepExpired(now);
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return { allowed: true };
   }

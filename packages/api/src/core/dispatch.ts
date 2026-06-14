@@ -44,55 +44,59 @@ function validationEnvelope(err: ZodError): Envelope {
 }
 
 export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
-  const entry = registry.get(input.name);
-  const requiresAuth = entry ? entry.requiresAuth : true;
-
-  // 1. Auth (before intent resolution) for non-public intents.
-  let agent: AuthedAgent | null = null;
-  if (requiresAuth) {
-    const bearer = extractBearer(input.authHeader);
-    if (!bearer) return done(fail("missing bearer token", ERROR_TYPE.unauthorized));
-    agent = await resolveAgent(gatewayDb, bearer);
-    if (!agent) return done(fail("invalid or revoked token", ERROR_TYPE.unauthorized));
-  }
-
-  // 2. Rate limit (per token, or per client IP for the public enroll call).
-  const rlKey = agent ? `agent:${agent.id}` : `ip:${input.clientIp}`;
-  const rl = checkRateLimit(rlKey);
-  if (!rl.allowed) {
-    return done(fail("rate limit exceeded", ERROR_TYPE.rateLimited), {
-      "Retry-After": String(rl.retryAfterSec ?? 60),
-    });
-  }
-
-  // 3. Unknown intent (only reachable once authed, so it doesn't leak to anon callers).
-  if (!entry) return done(fail(`unknown intent: ${input.name}`, ERROR_TYPE.notFound));
-
-  // 4. Parse the JSON body (empty body is treated as {}).
-  let parsed: unknown;
+  // The WHOLE pipeline is wrapped so ANY unexpected throw — an auth-phase DB failure, a
+  // handler throw, anything — still returns the uniform platform_error envelope and never
+  // leaks Hono's bare "Internal Server Error" text (the envelope invariant must hold even
+  // on failure; cf. docs/API.md 5xx -> platform_error).
   try {
-    parsed = input.rawBody.trim() === "" ? {} : JSON.parse(input.rawBody);
-  } catch {
-    return done(
-      fail("request body is not valid JSON", ERROR_TYPE.validation, {
-        first_error: "body: invalid JSON",
-      }),
-    );
-  }
+    const entry = registry.get(input.name);
+    const requiresAuth = entry ? entry.requiresAuth : true;
 
-  // 5. Schema validation → 400 with field_errors.
-  const result = entry.schema.safeParse(parsed);
-  if (!result.success) return done(validationEnvelope(result.error));
+    // 1. Auth (before intent resolution) for non-public intents.
+    let agent: AuthedAgent | null = null;
+    if (requiresAuth) {
+      const bearer = extractBearer(input.authHeader);
+      if (!bearer) return done(fail("missing bearer token", ERROR_TYPE.unauthorized));
+      agent = await resolveAgent(gatewayDb, bearer);
+      if (!agent) return done(fail("invalid or revoked token", ERROR_TYPE.unauthorized));
+    }
 
-  // 6. Handler. A handler must return an Envelope; an unexpected throw is a 5xx.
-  try {
+    // 2. Rate limit (per token, or per connection IP for the public enroll call).
+    const rlKey = agent ? `agent:${agent.id}` : `ip:${input.clientIp}`;
+    const rl = checkRateLimit(rlKey);
+    if (!rl.allowed) {
+      return done(fail("rate limit exceeded", ERROR_TYPE.rateLimited), {
+        "Retry-After": String(rl.retryAfterSec ?? 60),
+      });
+    }
+
+    // 3. Unknown intent (only reachable once authed, so it doesn't leak to anon callers).
+    if (!entry) return done(fail(`unknown intent: ${input.name}`, ERROR_TYPE.notFound));
+
+    // 4. Parse the JSON body (empty body is treated as {}; malformed is a 400, not a 500).
+    let parsed: unknown;
+    try {
+      parsed = input.rawBody.trim() === "" ? {} : JSON.parse(input.rawBody);
+    } catch {
+      return done(
+        fail("request body is not valid JSON", ERROR_TYPE.validation, {
+          first_error: "body: invalid JSON",
+        }),
+      );
+    }
+
+    // 5. Schema validation → 400 with field_errors.
+    const result = entry.schema.safeParse(parsed);
+    if (!result.success) return done(validationEnvelope(result.error));
+
+    // 6. Handler.
     const body = await entry.handler(
       { agent, db: gatewayDb, clientIp: input.clientIp },
       result.data as never,
     );
     return done(body);
   } catch (err) {
-    console.error(`intent ${input.name} threw:`, err);
+    console.error(`dispatch error for intent ${input.name}:`, err);
     return done(fail("internal error", ERROR_TYPE.platform));
   }
 }

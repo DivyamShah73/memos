@@ -29,6 +29,7 @@ import {
   timestamp,
   vector,
   index,
+  uniqueIndex,
   check,
   primaryKey,
   type AnyPgColumn,
@@ -84,7 +85,12 @@ export const agents = pgTable(
     lastCheckinAt: timestamp("last_checkin_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [check("agents_status_check", sql`${t.status} in ('active','revoked')`)],
+  (t) => [
+    // Auth hashes the bearer and looks the agent up by this column on every request,
+    // so it must be indexed; unique because two agents can never share a token hash.
+    uniqueIndex("agents_api_token_hash_idx").on(t.apiTokenHash),
+    check("agents_status_check", sql`${t.status} in ('active','revoked')`),
+  ],
 );
 
 export const enrollmentCodes = pgTable("enrollment_codes", {

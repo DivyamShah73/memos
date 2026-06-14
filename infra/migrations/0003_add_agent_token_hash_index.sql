@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "agents_api_token_hash_idx" ON "agents" USING btree ("api_token_hash");
