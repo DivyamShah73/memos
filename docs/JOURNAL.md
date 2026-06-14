@@ -34,9 +34,20 @@ updated to match, since code is the source of truth. Env loading was centralized
 dodge Node's IPv6-first `localhost` resolution against Docker's IPv4 port publish.
 
 Environment note: this machine had no Docker (and no WSL2) and no pnpm at the start. Installed
-pnpm; Docker Desktop + WSL2 is being installed operator-side. So the **static half** of the
-exit gate is green now — `pnpm install`, `pnpm typecheck`, `pnpm test`, migration generation
-in correct journal order, and the migrator failing only at DB connection (proving code/path/env
-are sound). The **runtime half** (`docker compose up`, `pnpm db:migrate` against a live DB,
-`testing/phase0.sh`) is pending Docker and will be closed with the operator before the box is
-checked.
+pnpm; the operator installed WSL2 + Docker Desktop. The **static half** of the gate went green
+first (`pnpm install`/`typecheck`/`test`, migration generation in correct journal order, the
+migrator failing only at DB connection). Then a real infra snag: `docker compose up` couldn't
+pull any image — every layer dropped mid-transfer with `EOF` from `production.cloudfront.docker.com`.
+Isolated it carefully: the host downloaded 10MB fine and the WSL2 VM downloaded 10MB from
+Cloudflare fine, so it wasn't the network or MTU (tried 1480→1400→1280, no change) — it was
+Docker Hub's CloudFront CDN specifically. Fix: pulled the three images through Google's Docker
+Hub mirror (`mirror.gcr.io`) and re-tagged them to the canonical names compose expects. (Worth
+making persistent later via `registry-mirrors` in Docker's daemon.json.)
+
+**Phase 0 gate is now fully GREEN.** `docker compose up` brings up db/minio/redis (db+redis
+healthy, MinIO console 200 at :9001); `pnpm db:migrate` applies 0000→0002 with no error and is
+idempotent on re-run; `testing/phase0.sh` PASSes every one of the 17 tables plus the spot-checks
+(`facts.embedding` is `vector(1536)`, FORCE RLS on, 4 policies); extensions `vector`+`pgcrypto`
+and the `memos_app` login role are present; `pnpm typecheck` clean. The RLS *enforcement* proof
+(agent A can't read project B, default-deny on unset GUC) is deferred to Phase 1, where the
+gateway connects as `memos_app` and sets the per-request GUC — as ADR-002 lays out.
