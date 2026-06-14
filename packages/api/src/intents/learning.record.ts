@@ -3,13 +3,12 @@
  * withScope tx. A learning at confidence >= medium needs both an evidence_artifact_id (same
  * project/run) and a non_obvious_marker (>= 15 chars).
  */
-import { and, eq } from "drizzle-orm";
 import type { LearningRecordInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
-import { assertEvidence } from "./_evidence.js";
-import { learnings as learningsTable, workflowRuns } from "../db/schema.js";
+import { assertEvidence, assertRunWritable } from "./_evidence.js";
+import { learnings as learningsTable } from "../db/schema.js";
 
 type TxResult = { kind: "error"; message: string } | { kind: "ok"; ids: string[] };
 
@@ -28,12 +27,8 @@ export async function learningRecord(
 
   try {
     const result: TxResult = await withScope(async (tx): Promise<TxResult> => {
-      const run = await tx
-        .select({ bdId: workflowRuns.bdId })
-        .from(workflowRuns)
-        .where(and(eq(workflowRuns.bdId, bd_id), eq(workflowRuns.projectId, project_id)))
-        .limit(1);
-      if (run.length === 0) return { kind: "error", message: "unknown workflow run" };
+      const run = await assertRunWritable(tx, project_id, bd_id);
+      if (!run.ok) return { kind: "error", message: run.message };
 
       const ev = await assertEvidence(tx, {
         projectId: project_id,

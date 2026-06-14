@@ -57,6 +57,7 @@ export async function putObject(key: string, body: Buffer, contentType: string):
 
 export async function getObject(key: string): Promise<Buffer> {
   const res = await client.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-  const bytes = await res.Body!.transformToByteArray();
+  if (!res.Body) throw new Error(`blob store returned no body for key: ${key}`);
+  const bytes = await res.Body.transformToByteArray();
   return Buffer.from(bytes);
 }

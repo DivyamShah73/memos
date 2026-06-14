@@ -18,7 +18,10 @@ export const learningRecordInputSchema = z
   .object({
     project_id: z.string().min(1, "is required"),
     bd_id: z.string().min(1, "is required"),
-    learnings: z.array(learningItemSchema).min(1, "at least one learning is required"),
+    learnings: z
+      .array(learningItemSchema)
+      .min(1, "at least one learning is required")
+      .max(100, "at most 100 learnings per batch"),
   })
   .superRefine((v, ctx) => {
     v.learnings.forEach((l, i) => {
@@ -30,7 +33,8 @@ export const learningRecordInputSchema = z
           message: "is required when confidence >= medium",
         });
       }
-      if (!l.non_obvious_marker || l.non_obvious_marker.length < 15) {
+      // .trim() so a whitespace-only marker can't satisfy the non-obvious gate.
+      if (!l.non_obvious_marker || l.non_obvious_marker.trim().length < 15) {
         ctx.addIssue({
           path: ["learnings", i, "non_obvious_marker"],
           code: "custom",

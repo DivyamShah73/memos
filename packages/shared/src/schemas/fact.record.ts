@@ -15,7 +15,10 @@ export const factRecordInputSchema = z
   .object({
     project_id: z.string().min(1, "is required"),
     bd_id: z.string().min(1, "is required"),
-    facts: z.array(factItemSchema).min(1, "at least one fact is required"),
+    facts: z
+      .array(factItemSchema)
+      .min(1, "at least one fact is required")
+      .max(100, "at most 100 facts per batch"),
   })
   .superRefine((v, ctx) => {
     v.facts.forEach((f, i) => {

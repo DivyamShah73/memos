@@ -4,7 +4,29 @@
  */
 import { and, eq } from "drizzle-orm";
 import type { ScopedTx } from "../core/scope.js";
-import { artifacts } from "../db/schema.js";
+import { artifacts, workflowRuns } from "../db/schema.js";
+
+export type RunCheck = { ok: true } | { ok: false; message: string };
+
+/**
+ * Shared run-writability check for artifact/fact/learning writes: the run must exist in this
+ * project (RLS hides another tenant's) AND still be open. Mirrors checkin's "already closed"
+ * rule so you can't append evidence/facts/learnings to a completed run.
+ */
+export async function assertRunWritable(
+  tx: ScopedTx,
+  projectId: string,
+  bdId: string,
+): Promise<RunCheck> {
+  const rows = await tx
+    .select({ status: workflowRuns.status })
+    .from(workflowRuns)
+    .where(and(eq(workflowRuns.bdId, bdId), eq(workflowRuns.projectId, projectId)))
+    .limit(1);
+  if (rows.length === 0) return { ok: false, message: "unknown workflow run" };
+  if (rows[0].status !== "open") return { ok: false, message: "workflow run already closed" };
+  return { ok: true };
+}
 
 export interface EvidenceItem {
   confidence: "low" | "medium" | "high";
@@ -33,7 +55,7 @@ export async function assertEvidence(
       if (!item.evidence_artifact_id) {
         return { kind: "validation", message: `item ${i}: evidence_artifact_id is required when confidence >= medium` };
       }
-      if (requireMarker && (!item.non_obvious_marker || item.non_obvious_marker.length < 15)) {
+      if (requireMarker && (!item.non_obvious_marker || item.non_obvious_marker.trim().length < 15)) {
         return { kind: "validation", message: `item ${i}: non_obvious_marker (>= 15 chars) is required when confidence >= medium` };
       }
     }

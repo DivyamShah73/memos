@@ -2,13 +2,12 @@
  * fact.record — batched, evidence-gated. All-or-nothing: if any fact fails the gate or cites a
  * bad artifact, the whole batch is rejected (one withScope tx → clean rollback).
  */
-import { and, eq } from "drizzle-orm";
 import type { FactRecordInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
-import { assertEvidence } from "./_evidence.js";
-import { facts as factsTable, workflowRuns } from "../db/schema.js";
+import { assertEvidence, assertRunWritable } from "./_evidence.js";
+import { facts as factsTable } from "../db/schema.js";
 
 type TxResult = { kind: "error"; message: string } | { kind: "ok"; ids: string[] };
 
@@ -24,12 +23,8 @@ export async function factRecord(ctx: IntentContext, input: FactRecordInput): Pr
 
   try {
     const result: TxResult = await withScope(async (tx): Promise<TxResult> => {
-      const run = await tx
-        .select({ bdId: workflowRuns.bdId })
-        .from(workflowRuns)
-        .where(and(eq(workflowRuns.bdId, bd_id), eq(workflowRuns.projectId, project_id)))
-        .limit(1);
-      if (run.length === 0) return { kind: "error", message: "unknown workflow run" };
+      const run = await assertRunWritable(tx, project_id, bd_id);
+      if (!run.ok) return { kind: "error", message: run.message };
 
       const ev = await assertEvidence(tx, { projectId: project_id, bdId: bd_id, items: facts });
       if (ev.kind === "validation") return { kind: "error", message: ev.message };

@@ -4,15 +4,18 @@
  * evidence is ACCEPTED, the product is broken.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import {
   call,
   cleanupAndClose,
   enrollAgent,
+  ownerDb,
   seedArtifact,
   seedBase,
   seedProject,
   seedWorkflowRun,
 } from "../_testutil.js";
+import { workflowRuns } from "../db/schema.js";
 
 const P = "project.vitest-gate";
 const POTHER = "project.vitest-gate-other";
@@ -98,6 +101,36 @@ describe("evidence gate", () => {
     });
     expect(status).toBe(400);
     expect(json.detail.field_errors["learnings.0.non_obvious_marker"]).toBeDefined();
+  });
+
+  it("REJECTS a learning whose non_obvious_marker is only whitespace (gate not bypassable)", async () => {
+    const { status, json } = await call("learning.record", token, {
+      project_id: P,
+      bd_id: bd,
+      learnings: [
+        {
+          claim: "x",
+          applies_to: ["fine-tuning"],
+          confidence: "medium",
+          non_obvious_marker: "               ", // 15 spaces
+          evidence_artifact_id: artifactInP,
+        },
+      ],
+    });
+    expect(status).toBe(400);
+    expect(json.detail.field_errors["learnings.0.non_obvious_marker"]).toBeDefined();
+  });
+
+  it("REJECTS a fact.record on an already-closed run", async () => {
+    const closed = await seedWorkflowRun(P);
+    await ownerDb.update(workflowRuns).set({ status: "complete" }).where(eq(workflowRuns.bdId, closed));
+    const { json } = await call("fact.record", token, {
+      project_id: P,
+      bd_id: closed,
+      facts: [{ claim: "late write", confidence: "low" }],
+    });
+    expect(json.ok).toBe(false);
+    expect(json.error).toMatch(/already closed/);
   });
 
   it("REJECTS a fact citing a non-existent artifact", async () => {
