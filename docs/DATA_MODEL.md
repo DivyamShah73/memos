@@ -109,7 +109,7 @@ workflow_runs ( bd_id text pk,              -- 'memos-<short>' (generate short i
 checkins ( id uuid pk,
            bd_id → workflow_runs,
            project_id → projects,
-           target_objective_id uuid null,
+           target_objective_id uuid null → objectives,  -- FK backstop (mirrors the run's objective)
            status text,                     -- start | progress | blocked | complete | failed
            current_task text,
            created_at )
@@ -224,23 +224,25 @@ Isolation lives here, not in handlers. **Roles are separated:** migrations run a
 owner/superuser; the gateway connects at runtime as the non-owner role `memos_app`. Per
 request the gateway runs
 `select set_config('memos.agent_projects', '{project.a,project.b}', true);`
-derived from the authed token's `scopes`. Then every tenant-scoped table gets `ENABLE`
-**and `FORCE`** row level security plus four policies (the owner bypasses non-forced RLS,
-so `FORCE` is what makes it real — see `docs/decisions/002`):
+derived from the authed token's `scopes` (ADR-004). Then every tenant-scoped table gets
+`ENABLE` **and `FORCE`** row level security plus four policies. The predicate wraps the
+setting in `nullif(…, '')` so a never-set GUC (NULL) **and** an empty-string GUC both
+default-deny instead of erroring — a custom dotted GUC reverts to `''` (not NULL) after a
+`SET LOCAL`, and a bare `''::text[]` raises "malformed array literal" (migration 0004):
 
 ```sql
 alter table facts enable row level security;
 alter table facts force  row level security;
 
 create policy facts_select on facts for select
-  using (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+  using (project_id = any (nullif(current_setting('memos.agent_projects', true), '')::text[]));
 create policy facts_insert on facts for insert
-  with check (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+  with check (project_id = any (nullif(current_setting('memos.agent_projects', true), '')::text[]));
 create policy facts_update on facts for update
-  using      (project_id = any (current_setting('memos.agent_projects', true)::text[]))
-  with check (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+  using      (project_id = any (nullif(current_setting('memos.agent_projects', true), '')::text[]))
+  with check (project_id = any (nullif(current_setting('memos.agent_projects', true), '')::text[]));
 create policy facts_delete on facts for delete
-  using (project_id = any (current_setting('memos.agent_projects', true)::text[]));
+  using (project_id = any (nullif(current_setting('memos.agent_projects', true), '')::text[]));
 
 grant select, insert, update, delete on facts to memos_app;
 ```

@@ -103,3 +103,56 @@ model; a future enhancement.
 DB's fsync IO — it caused a backend crash + a multi-minute crash-recovery mid-session. Switched
 `db`/`minio`/`redis` to **named Docker volumes** (in the WSL2 ext4 filesystem) and re-migrated
 from scratch (no real data lost). The DB is stable since.
+
+---
+
+## 2026-06-15 — Phase 2: workflow + checkin (the provenance spine)
+
+Added `workflow.create` (→ `bd_id`) and `checkin`, and — the real work — **wired per-request
+RLS** (ADR-004). `core/scope.ts` exposes an agent-bound `ctx.withScope(fn)` that runs DB work
+in a transaction whose first statement is `set_config('memos.agent_projects', '{…}', true)`;
+postgres-js pins the tx to one connection, so `SET LOCAL` is transaction-scoped and never
+leaks across the pool. RLS'd reads (objectives, workflow_runs) go through `withScope`; the raw
+`gatewayDb` is only for the un-RLS'd control-plane tables. Handlers also do an explicit
+`project_id ∈ scopes` 403 pre-check — load-bearing, because an out-of-scope INSERT trips RLS
+`WITH CHECK` and *throws* `42501` (a 500), so the pre-check is what yields a clean 403 (with a
+`42501` backstop). `bd_id` = `memos-`+8 hex with a 23505 retry; the run carries `agent_id` for
+provenance. `workflow.create` enforces the okrs binding rule ("…is abandoned; cannot bind"
+verbatim) reading the objective in-scope; `checkin` looks the run up in-scope (RLS hides other
+tenants → "unknown workflow run"), asserts `run.projectId === project_id` (closes an
+intra-scope hole), rejects closed runs, and closes the run on complete/failed.
+
+The **tenant-isolation test** is the headline: agent A can't create in B (403) and can't see
+B's run (invisible), plus two GUC-proof assertions (no-scope read → `[]`, scoped read → row)
+so it can't pass for the wrong reason. That GUC-proof immediately **caught a real latent bug**:
+`current_setting('memos.agent_projects', true)::text[]` raises `malformed array literal: ""` on
+a *reused* pooled connection, because a custom dotted GUC reverts to `''` (not NULL) after a
+`SET LOCAL`. Migration **0004** hardens all 36 policies to `nullif(current_setting(…), '')::text[]`
+so unset and empty both default-deny cleanly. Also corrected a real **doc defect**: ADR-002 and
+`seed.ts` claimed the owner-run seed must set the GUC because "FORCE binds the owner" — false
+for our config, since the owner is the `postgres` *superuser* (bypasses RLS unconditionally;
+FORCE only binds a non-superuser table-owner). Fixtures seed cross-tenant data with no GUC.
+
+Gate green: `pnpm typecheck` clean; **26 tests** (5 files, incl. the isolation + GUC proofs;
+DB-integration files run sequentially via `fileParallelism:false` to avoid fixture races);
+`testing/phase2.sh` passes the full loop over HTTP (enroll → workflow.create bound to an
+objective → start/complete checkins → run closed; unbound workflow rejected). `smoke_all`
+now chains phases 0–2.
+
+**Code-review pass** (xhigh) caught a real cluster in the provenance spine — all fixed: (1)
+**the alarming one** — `target_objective_id` was only validated inside `if (okrs_required)`, so
+on a non-okrs project a supplied objective was inserted unchecked; a *foreign-tenant* objective
+UUID passes the FK (FK checks bypass RLS) → a cross-tenant provenance binding (invariants #3/#4),
+and a non-existent UUID → FK 23503 → uncaught → 500. Fix: validate the objective **whenever
+supplied**, in-scope — a foreign objective is RLS-invisible (→ "not found", no binding) and a
+bogus one is a clean business error. (2) `checkins.target_objective_id` had **no FK** (unlike
+`workflow_runs`) → added it (migration 0005) as a DB backstop. (3) checkin compared the UUID
+with case-sensitive JS `!==` vs Postgres's lowercase → an uppercase UUID wrongly rejected; now
+lowercased. (4) checkin gated on the **live `projects.okrs_required` flag** → flipping it
+mid-run bricked an open run forever; now the objective rule **derives from the run's binding**
+(immutable since creation), and checkin no longer reads `projects` at all (one fewer round-trip).
+(5) **TOCTOU** on close — a non-locking read + unconditional UPDATE let concurrent terminal
+checkins double-close; now `SELECT … FOR UPDATE` + a `status='open'` guard on the close. checkin
+also now stores the run's canonical objective on the checkin (always valid). Re-verified: 29
+tests (added cross-tenant-binding rejection, non-okrs validation, concurrent-close
+serialization), typecheck clean, `smoke_all` green.

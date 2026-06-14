@@ -1,0 +1,1 @@
+ALTER TABLE "checkins" ADD CONSTRAINT "checkins_target_objective_id_objectives_id_fk" FOREIGN KEY ("target_objective_id") REFERENCES "public"."objectives"("id") ON DELETE no action ON UPDATE no action;

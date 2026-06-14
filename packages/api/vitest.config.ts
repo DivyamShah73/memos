@@ -8,5 +8,8 @@ export default defineConfig({
     // the start — an empty run must exit 0 rather than fail "no test files found".
     passWithNoTests: true,
     include: ["test/**/*.test.ts", "src/**/*.test.ts"],
+    // Integration tests share one live Postgres + the vitest-prefixed fixtures. Run files
+    // sequentially so their setup/teardown can't race each other on shared rows.
+    fileParallelism: false,
   },
 });

@@ -205,7 +205,9 @@ export const checkins = pgTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id),
-    targetObjectiveId: uuid("target_objective_id"),
+    // FK to objectives like workflow_runs.target_objective_id — a DB backstop so this
+    // provenance column can never hold a dangling/foreign objective id.
+    targetObjectiveId: uuid("target_objective_id").references(() => objectives.id),
     status: text("status").notNull(), // start | progress | blocked | complete | failed
     currentTask: text("current_task"),
     createdAt: createdAt(),

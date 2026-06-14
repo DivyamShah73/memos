@@ -29,6 +29,20 @@
       "when": 1781466672673,
       "tag": "0003_add_agent_token_hash_index",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781471584817,
+      "tag": "0004_harden_rls_guc",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781473792943,
+      "tag": "0005_checkins_objective_fk",
+      "breakpoints": true
     }
   ]
 }
