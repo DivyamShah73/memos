@@ -91,5 +91,34 @@ curl -s -X POST $API/v1/intent/checkin -H "authorization: Bearer $TOK" \
 # → { "ok": true, "data": { "checkin_id": "…", "accepted_facts": 0, ... } }
 ```
 
-*More intents are added per phase (artifact.upload, fact.record, learning.record, … ) — see
+### `artifact.upload` — store evidence bytes (→ MinIO)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id": string, "kind": string, "description"?: string, "mime_type": string, "content_base64": string }`
+- **Returns:** `{ "artifact_id": uuid, "bucket_path": string, "size_bytes": number, "sha256": string }`
+- **Notes:** bytes go to the blob store at `{project_id}/{artifact_id}`; only metadata + `sha256` land in Postgres. Cite the `artifact_id` from a fact/learning to satisfy the evidence gate (it must be the **same project + same run**).
+
+### `fact.record` — record verified observations (batched, evidence-gated)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id": string, "facts": [{ "claim": string, "confidence": "low"|"medium"|"high", "evidence_artifact_id"?: uuid }] }`
+- **Returns:** `{ "fact_ids": uuid[] }`
+- **Notes:** **evidence gate** — `confidence ≥ medium` requires an `evidence_artifact_id` (400 if missing) that exists in the same project/run (`ok:false` otherwise — covers non-existent + cross-tenant). `low` may be unbacked. All-or-nothing batch.
+
+### `learning.record` — record reusable insights (batched, evidence + non-obvious gated)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id": string, "learnings": [{ "claim": string, "applies_to": string[], "confidence": …, "non_obvious_marker"?: string, "evidence_artifact_id"?: uuid }] }`
+- **Returns:** `{ "learning_ids": uuid[] }`
+- **Notes:** at `confidence ≥ medium`, BOTH an `evidence_artifact_id` AND a `non_obvious_marker` (≥15 chars) are required (400 otherwise). `applies_to` are problem-domain tags, not project names.
+
+```bash
+# upload evidence, then record an evidence-backed fact
+ART=$(curl -s -X POST $API/v1/intent/artifact.upload -H "authorization: Bearer $TOK" \
+  -H 'content-type: application/json' \
+  -d "{\"project_id\":\"project.demo\",\"bd_id\":\"$BD\",\"kind\":\"log\",\"mime_type\":\"text/plain\",\"content_base64\":\"$(printf 'evidence' | base64 -w0)\"}" \
+  | sed -n 's/.*"artifact_id":"\([0-9a-f-]*\)".*/\1/p')
+curl -s -X POST $API/v1/intent/fact.record -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
+  -d "{\"project_id\":\"project.demo\",\"bd_id\":\"$BD\",\"facts\":[{\"claim\":\"D7 dropped 11pp\",\"confidence\":\"medium\",\"evidence_artifact_id\":\"$ART\"}]}"
+# → { "ok": true, "data": { "fact_ids": ["…"] } }
+```
+
+*More intents are added per phase (fact.query, learning.query, objective.*, brief.*, … ) — see
 `docs/PHASED_BUILD_PLAN.md`.*

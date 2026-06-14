@@ -156,3 +156,30 @@ checkins double-close; now `SELECT … FOR UPDATE` + a `status='open'` guard on 
 also now stores the run's canonical objective on the checkin (always valid). Re-verified: 29
 tests (added cross-tenant-binding rejection, non-okrs validation, concurrent-close
 serialization), typecheck clean, `smoke_all` green.
+
+---
+
+## 2026-06-15 — Phase 3: artifacts + evidence-gated writes (THE core invariant)
+
+The load-bearing phase. `artifact.upload` stores evidence bytes in MinIO (S3 via
+`@aws-sdk/client-s3`, `forcePathStyle`, lazy-memoized `ensureBucket`) at
+`{project_id}/{uuid}`; only `bucket_path` + `sha256` + `size_bytes` land in Postgres — the
+bytes never do. Ordering is deliberate: **PutObject runs outside the DB transaction, blob
+before row**, so a long S3 RTT can't pin a pooled connection/locks, and the only possible
+orphan is a harmless unreferenced blob (a Phase-4 sweep GCs it) — never a row pointing at no
+blob. `fact.record` / `learning.record` are batched + evidence-gated in **both layers**: the
+Zod schema `superRefine`s each item (`confidence ≥ medium ⇒ evidence_artifact_id`, learnings
+also `non_obvious_marker ≥ 15` — pushing the array index into the issue path so
+`detail.field_errors` reads `facts.0.evidence_artifact_id` → 400), and a shared
+`intents/_evidence.ts` helper re-checks in the handler AND validates the cite with one
+in-scope `SELECT artifacts WHERE id AND project_id AND bd_id` — never the FK alone (it
+resolves a foreign-tenant id globally). 0 rows covers non-existent + cross-tenant + wrong-run.
+Batches are all-or-nothing in one `withScope` tx; embeddings stay NULL (Phase 4).
+
+Gate green: `pnpm typecheck` clean; **40 tests** (the invariant `evidence-gate.test.ts`: low
+no-ev ACCEPTED, medium no-ev → 400, high learning no-marker → 400, marker<15 → 400,
+non-existent cite → ok:false, **cross-tenant cite → ok:false**, evidence-backed fact/learning
+ACCEPTED; `artifact.upload.test.ts`: sha256 roundtrip from MinIO + `information_schema` proof
+of no `bytea` column). `testing/phase3.sh` runs the loop over HTTP and proves the gate (medium
+no-evidence rejected, with-evidence accepted, bytes not in Postgres). `smoke_all` now chains
+0–3.

@@ -12,8 +12,11 @@ import { db as ownerDb, queryClient } from "./db/index.js";
 import { gatewayClient } from "./db/gateway.js";
 import {
   agents,
+  artifacts,
   checkins,
   enrollmentCodes,
+  facts,
+  learnings,
   objectives,
   orgs,
   projects,
@@ -70,6 +73,32 @@ export async function seedObjective(projectId: string, status = "active"): Promi
   return row.id;
 }
 
+/** Open a workflow run via the owner client (bypasses RLS); returns its bd_id. */
+export async function seedWorkflowRun(projectId: string): Promise<string> {
+  const bdId = `memos-${randomBytes(4).toString("hex")}`;
+  await ownerDb
+    .insert(workflowRuns)
+    .values({ bdId, projectId, workflowClass: "test", title: "vitest run" });
+  return bdId;
+}
+
+/** Insert an artifacts METADATA row via the owner client (no blob). For cite-check tests. */
+export async function seedArtifact(projectId: string, bdId: string): Promise<string> {
+  const [row] = await ownerDb
+    .insert(artifacts)
+    .values({
+      projectId,
+      bdId,
+      kind: "log",
+      mimeType: "text/plain",
+      bucketPath: `${projectId}/seed`,
+      sizeBytes: 1,
+      sha256: "0".repeat(64),
+    })
+    .returning({ id: artifacts.id });
+  return row.id;
+}
+
 /** Mint a single-use code for the given scopes, enroll, and return the raw token. */
 export async function enrollAgent(scopes: string[], displayName: string): Promise<string> {
   const code = `enr_code_vitest_${randomBytes(6).toString("hex")}`;
@@ -82,7 +111,12 @@ export async function enrollAgent(scopes: string[], displayName: string): Promis
 export async function cleanupAndClose(projectIds: string[]): Promise<void> {
   try {
     for (const pid of projectIds) {
+      // FK order: facts/learnings → artifacts/workflow_runs; artifacts/checkins →
+      // workflow_runs; workflow_runs → objectives; objectives → projects.
+      await ownerDb.delete(facts).where(eq(facts.projectId, pid));
+      await ownerDb.delete(learnings).where(eq(learnings.projectId, pid));
       await ownerDb.delete(checkins).where(eq(checkins.projectId, pid));
+      await ownerDb.delete(artifacts).where(eq(artifacts.projectId, pid));
       await ownerDb.delete(workflowRuns).where(eq(workflowRuns.projectId, pid));
       await ownerDb.delete(objectives).where(eq(objectives.projectId, pid));
       await ownerDb.delete(projects).where(eq(projects.id, pid));

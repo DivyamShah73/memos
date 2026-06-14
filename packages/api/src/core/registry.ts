@@ -4,12 +4,22 @@
  * via the scaffold-intent skill.
  */
 import type { ZodTypeAny } from "zod";
-import { checkinInputSchema, enrollInputSchema, workflowCreateInputSchema } from "@memos/shared";
+import {
+  artifactUploadInputSchema,
+  checkinInputSchema,
+  enrollInputSchema,
+  factRecordInputSchema,
+  learningRecordInputSchema,
+  workflowCreateInputSchema,
+} from "@memos/shared";
 import type { IntentContext } from "./context.js";
 import type { Envelope } from "./envelope.js";
 import { enroll } from "../intents/agent.enroll.js";
 import { workflowCreate } from "../intents/workflow.create.js";
 import { checkin } from "../intents/checkin.js";
+import { artifactUpload } from "../intents/artifact.upload.js";
+import { factRecord } from "../intents/fact.record.js";
+import { learningRecord } from "../intents/learning.record.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -42,6 +52,30 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: checkinInputSchema,
       handler: checkin as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "artifact.upload",
+    {
+      schema: artifactUploadInputSchema,
+      handler: artifactUpload as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "fact.record",
+    {
+      schema: factRecordInputSchema,
+      handler: factRecord as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "learning.record",
+    {
+      schema: learningRecordInputSchema,
+      handler: learningRecord as IntentDef["handler"],
       requiresAuth: true,
     },
   ],
