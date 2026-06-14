@@ -12,8 +12,9 @@
     "dev": "tsx watch src/server.ts"
   },
   "dependencies": {
-    "@memos/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1068.0",
     "@hono/node-server": "^1.13.7",
+    "@memos/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.14",
     "postgres": "^3.4.5",
