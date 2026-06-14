@@ -1,0 +1,57 @@
+# MemOS local infrastructure (Phase 0).
+# Lives at the REPO ROOT on purpose: testing/phase0.sh runs `docker compose up -d`
+# and `docker compose exec -T db ...` from the root with no -f flag, addressing the
+# Postgres service by its key `db`. Do not move this to infra/ without rewriting the
+# scripts. Bytes live in ./infra/data/* (gitignored); never commit DB/MinIO state.
+
+services:
+  db:
+    # pgvector/pgvector:pg16 ships Postgres 16 with the pgvector extension binary
+    # available (the extension still has to be CREATE EXTENSION'd by 0000_prereqs.sql).
+    image: pgvector/pgvector:pg16
+    container_name: memos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: memos
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      # phase0.sh migrates immediately after `up`; gate db:migrate on real readiness.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d memos"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: memos-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console (Phase 0 gate: reachable at localhost:9001)
+    volumes:
+      - ./infra/data/minio:/data
+    # No healthcheck: the minio image often lacks curl, so an HTTP healthcheck flaps
+    # and can hold up `docker compose up`. Nothing in Phase 0 blocks on MinIO health.
+
+  redis:
+    image: redis:7-alpine
+    container_name: memos-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra/data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
