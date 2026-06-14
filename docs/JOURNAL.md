@@ -51,3 +51,33 @@ idempotent on re-run; `testing/phase0.sh` PASSes every one of the 17 tables plus
 and the `memos_app` login role are present; `pnpm typecheck` clean. The RLS *enforcement* proof
 (agent A can't read project B, default-deny on unset GUC) is deferred to Phase 1, where the
 gateway connects as `memos_app` and sets the per-request GUC — as ADR-002 lays out.
+
+---
+
+## 2026-06-15 — Phase 1: gateway core + auth + enrollment
+
+Built the intent-RPC gateway. One Hono route `POST /v1/intent/:name` (+ `GET /health`) runs a
+fixed pipeline in `core/dispatch.ts`: resolve the registry entry → **auth before resolution**
+(any non-public intent with a missing/invalid bearer → 401, even an unimplemented one, so the
+intent catalogue never leaks to anon callers) → rate-limit stub → 404 for unknown intents →
+JSON parse (malformed → 400) → Zod `safeParse` (→ 400 with `detail.field_errors`) → handler.
+The uniform envelope + a `statusFor` map live in `core/envelope.ts`, with the deliberate split
+that business-rule failures are HTTP 200 `ok:false` (not 4xx). `app.ts` is exported separately
+from `server.ts` so tests drive it in-process via `app.request()`.
+
+`agent.enroll` is the first (and only public) intent. Token auth (ADR-003): `syn_` +
+base64url(32 random bytes), stored only as `sha256` hex, looked up by hash with
+`status='active'` filtered in SQL. Single-use is an atomic CAS —
+`UPDATE … WHERE used_by IS NULL RETURNING` + the agent INSERT in the same transaction, with a
+suffix-retry guarding the (astronomically unlikely) agent-id collision. The gateway connects as
+the non-owner `memos_app` role (ADR-002); Phase 1 only touches the un-RLS'd control-plane
+tables, so no per-request GUC yet (noted for Phase 2 in ADR-003). Zod schemas live in
+`@memos/shared` and are barrel-exported (the package only exposes `"."`), with `zod` a dep of
+both shared and api.
+
+Gate green: `pnpm typecheck` clean; **8 Vitest cases pass** (happy path, hash-not-raw,
+reused→ok:false, concurrent double-enroll→exactly-one-wins, invalid→ok:false, no-token
+`workflow.create`→401, malformed→400+field_errors, non-JSON→400); and `testing/phase1.sh`
+passes over real HTTP — it seeds a fresh code, self-starts the server with plain `tsx` (no
+watch), and cleans up the process via `netstat`+`taskkill //T` (the `$!`-is-the-MSYS-pid trap
+on Git Bash). `smoke_all.sh` now chains phase0 + phase1.
