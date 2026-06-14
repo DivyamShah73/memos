@@ -81,3 +81,25 @@ reused→ok:false, concurrent double-enroll→exactly-one-wins, invalid→ok:fal
 passes over real HTTP — it seeds a fresh code, self-starts the server with plain `tsx` (no
 watch), and cleans up the process via `netstat`+`taskkill //T` (the `$!`-is-the-MSYS-pid trap
 on Git Bash). `smoke_all.sh` now chains phase0 + phase1.
+
+**Code-review pass** (xhigh workflow: 9 finder angles → verify → sweep). Nothing alarming;
+the core was confirmed sound. Fixed six real findings: (1) the uniform-envelope invariant was
+breakable — an auth-phase DB throw escaped to Hono's bare-text 500, so the whole dispatch is
+now wrapped + an `app.onError` safety net always returns the envelope; (2) added a **unique
+index** on `agents.api_token_hash` (migration 0003) — it's the per-request auth lookup and was
+an O(rows) scan; (3) the rate-limit key trusted the spoofable `X-Forwarded-For` and collapsed
+to one shared `"local"` bucket — now keyed on the actual connection address via
+`getConnInfo` (trusted-proxy XFF is Phase 6); (4) the limiter Map is now size-bounded with
+expired-entry eviction; (5) added a `bodyLimit` (8 MiB) so a huge body can't OOM the gateway
+before any gate runs (covered by a 413 test → 9 tests now); (6) the test now uses test-owned
+fixture ids (`org.vitest`/`team.vitest`) and a `finally` that always closes the pools, so
+re-runs can't FK-collide with phase1.sh's `org`/`team.demo`. Also hardened the migrator to
+retry Postgres `57P03`/class-08 (transient "in recovery"/connection) errors, not just Node
+socket errors. Enrollment-code *expiry* (a finder note) is deferred — it's not in the data
+model; a future enhancement.
+
+**Infra reliability fix:** the Postgres data dir was bind-mounted to the Windows filesystem
+(`./infra/data/postgres`); on Docker Desktop/WSL2 the 9p bridge is slow and crash-prone for a
+DB's fsync IO — it caused a backend crash + a multi-minute crash-recovery mid-session. Switched
+`db`/`minio`/`redis` to **named Docker volumes** (in the WSL2 ext4 filesystem) and re-migrated
+from scratch (no real data lost). The DB is stable since.
