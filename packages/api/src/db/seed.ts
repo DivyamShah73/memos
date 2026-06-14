@@ -3,12 +3,11 @@
  *
  * Phase 0 stub: no rows yet. Real demo data lands in Phase 9 via the demo-seed skill.
  *
- * IMPORTANT for whoever fills this in: tables under FORCE ROW LEVEL SECURITY (facts,
- * learnings, etc.) reject inserts when the `memos.agent_projects` GUC is unset — even
- * for the owner. Before inserting, run
- *   set_config('memos.agent_projects', '{project.demo,...}', false)
- * listing every project being seeded, OR grant the seed role BYPASSRLS (which then does
- * not exercise the isolation path). See docs/decisions/002.
+ * Note on RLS: this runs as the OWNER (DATABASE_URL = the `postgres` superuser), and a
+ * superuser bypasses RLS unconditionally — FORCE only binds a non-superuser table-owner
+ * (see docs/decisions/002, the Phase-2 correction). So seeding RLS'd tables
+ * (facts/learnings/workflow_runs/…) needs NO `memos.agent_projects` GUC. If the owner is
+ * ever switched to a non-superuser role, set the GUC before inserting.
  */
 import "../env.js"; // side effect: loads the repo-root .env
 
