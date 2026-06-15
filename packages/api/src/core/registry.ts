@@ -8,7 +8,9 @@ import {
   artifactUploadInputSchema,
   checkinInputSchema,
   enrollInputSchema,
+  factQueryInputSchema,
   factRecordInputSchema,
+  learningQueryInputSchema,
   learningRecordInputSchema,
   workflowCreateInputSchema,
 } from "@memos/shared";
@@ -20,6 +22,8 @@ import { checkin } from "../intents/checkin.js";
 import { artifactUpload } from "../intents/artifact.upload.js";
 import { factRecord } from "../intents/fact.record.js";
 import { learningRecord } from "../intents/learning.record.js";
+import { factQuery } from "../intents/fact.query.js";
+import { learningQuery } from "../intents/learning.query.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -76,6 +80,22 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: learningRecordInputSchema,
       handler: learningRecord as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "fact.query",
+    {
+      schema: factQueryInputSchema,
+      handler: factQuery as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "learning.query",
+    {
+      schema: learningQueryInputSchema,
+      handler: learningQuery as IntentDef["handler"],
       requiresAuth: true,
     },
   ],
