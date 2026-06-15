@@ -120,5 +120,24 @@ curl -s -X POST $API/v1/intent/fact.record -H "authorization: Bearer $TOK" -H 'c
 # → { "ok": true, "data": { "fact_ids": ["…"] } }
 ```
 
-*More intents are added per phase (fact.query, learning.query, objective.*, brief.*, … ) — see
+### `fact.query` — keyword search over a project's facts
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "query": string, "limit"?: number (default 20, max 50) }`
+- **Returns:** `{ "facts": [{ "id": uuid, "claim": string, "confidence": …, "bd_id": string, "created_at": ts, "score": number }] }`
+- **Notes:** Postgres full-text search on `claim` (ranked by relevance, then recency). Scoped to the one `project_id` (RLS + explicit filter) — never returns another project's rows.
+
+### `learning.query` — keyword search over a project's learnings
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "query": string, "applies_to"?: string[], "limit"?: number }`
+- **Returns:** `{ "learnings": [{ "id", "claim", "applies_to", "confidence", "dok_grade", "reuse_count", "reuse_success_count", "non_obvious_marker", "created_at", "score" }] }`
+- **Notes:** ranked by relevance, then `reuse_success_count`, then recency. Optional `applies_to` filters by problem-domain tag (array overlap). Cross-silo (cross-project) discovery is a separate Phase-6 path; this query stays within `project_id`.
+
+```bash
+curl -s -X POST $API/v1/intent/learning.query -H "authorization: Bearer $TOK" \
+  -H 'content-type: application/json' \
+  -d '{"project_id":"project.demo","query":"vllm deployment"}'
+# → { "ok": true, "data": { "learnings": [ { "claim": "vllm gpu deployment tuning…", "score": 0.06, … } ] } }
+```
+
+*More intents are added per phase (objective.*, milestone.achieve, brief.*, question.*, … ) — see
 `docs/PHASED_BUILD_PLAN.md`.*
