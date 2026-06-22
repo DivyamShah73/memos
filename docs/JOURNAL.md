@@ -209,3 +209,16 @@ missing-query → 400, and **project-scope isolation** — A's query never retur
 while still returning A's own, which doubles as the GUC-is-set proof). `testing/phase4.sh`
 proves keyword search over HTTP (match returned, irrelevant query excluded); `smoke_all` now
 chains 0–4. That's the **Day-1 backend query layer** done.
+
+**Code-review pass** (Sonnet, medium) — nothing alarming; fixed two real findings and one
+cheap nit. (1) **whitespace-only query bypass**: `z.string().min(1)` admitted `"   "`, and
+`plainto_tsquery('english','   ')` yields an *empty* tsquery — which `@@` treats as matching
+every row, so the query would silently dump the whole project instead of keyword-matching.
+Fixed with `z.string().trim().min(1)` in both query schemas (`.trim()` runs before the length
+check), plus a regression test in each (`"   "` → 400). (2) **dead RLS catch on a SELECT**:
+both query handlers wrapped the read in `try/catch isRlsViolation → 403`, but a SELECT under
+RLS just returns 0 rows — it never raises 42501 (only a write `WITH CHECK` or a revoked GRANT
+does), so the catch was dead code that would have masked a real infra failure as a benign 403.
+Removed it from both, with a comment on why SELECTs don't need it. (3) tightened
+`learning.query`'s `applies_to` to `.min(1)` so an empty array can't slip through as a no-op
+filter. Re-verified: typecheck clean, **55 tests** green, `smoke_all` 0–4 green.

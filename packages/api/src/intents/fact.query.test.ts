@@ -53,6 +53,12 @@ describe("fact.query", () => {
     expect(json.detail.field_errors["query"]).toBeDefined();
   });
 
+  it("rejects a whitespace-only query (400) — must not dump the whole project", async () => {
+    const { status, json } = await call("fact.query", token, { project_id: A, query: "   " });
+    expect(status).toBe(400);
+    expect(json.detail.field_errors["query"]).toBeDefined();
+  });
+
   it("rejects an out-of-scope project (403)", async () => {
     const { status } = await call("fact.query", token, { project_id: B, query: "lora" });
     expect(status).toBe(403);
