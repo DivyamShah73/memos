@@ -10,8 +10,13 @@ import {
   enrollInputSchema,
   factQueryInputSchema,
   factRecordInputSchema,
+  keyResultUpdateInputSchema,
   learningQueryInputSchema,
   learningRecordInputSchema,
+  milestoneAchieveInputSchema,
+  objectivePublishInputSchema,
+  objectiveQueryInputSchema,
+  objectiveUpdateInputSchema,
   workflowCreateInputSchema,
 } from "@memos/shared";
 import type { IntentContext } from "./context.js";
@@ -24,6 +29,11 @@ import { factRecord } from "../intents/fact.record.js";
 import { learningRecord } from "../intents/learning.record.js";
 import { factQuery } from "../intents/fact.query.js";
 import { learningQuery } from "../intents/learning.query.js";
+import { objectivePublish } from "../intents/objective.publish.js";
+import { objectiveQuery } from "../intents/objective.query.js";
+import { objectiveUpdate } from "../intents/objective.update.js";
+import { milestoneAchieve } from "../intents/milestone.achieve.js";
+import { keyResultUpdate } from "../intents/key_result.update.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -96,6 +106,46 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: learningQueryInputSchema,
       handler: learningQuery as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "objective.publish",
+    {
+      schema: objectivePublishInputSchema,
+      handler: objectivePublish as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "objective.query",
+    {
+      schema: objectiveQueryInputSchema,
+      handler: objectiveQuery as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "objective.update",
+    {
+      schema: objectiveUpdateInputSchema,
+      handler: objectiveUpdate as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "milestone.achieve",
+    {
+      schema: milestoneAchieveInputSchema,
+      handler: milestoneAchieve as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "key_result.update",
+    {
+      schema: keyResultUpdateInputSchema,
+      handler: keyResultUpdate as IntentDef["handler"],
       requiresAuth: true,
     },
   ],

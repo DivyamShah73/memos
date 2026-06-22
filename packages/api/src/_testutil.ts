@@ -17,6 +17,7 @@ import {
   enrollmentCodes,
   facts,
   learnings,
+  milestones,
   objectives,
   orgs,
   projects,
@@ -65,11 +66,63 @@ export async function seedProject(id: string, okrsRequired = false): Promise<voi
     .onConflictDoNothing();
 }
 
-export async function seedObjective(projectId: string, status = "active"): Promise<string> {
+export interface SeedObjectiveOpts {
+  status?: string;
+  parentId?: string;
+  weight?: number;
+  bdId?: string;
+  title?: string;
+}
+
+export async function seedObjective(
+  projectId: string,
+  opts: SeedObjectiveOpts | string = {},
+): Promise<string> {
+  // Back-compat: earlier callers pass a status string positionally.
+  const o: SeedObjectiveOpts = typeof opts === "string" ? { status: opts } : opts;
   const [row] = await ownerDb
     .insert(objectives)
-    .values({ projectId, title: "vitest objective", status })
+    .values({
+      projectId,
+      title: o.title ?? "vitest objective",
+      status: o.status ?? "active",
+      parentId: o.parentId ?? null,
+      weight: o.weight !== undefined ? String(o.weight) : null,
+      bdId: o.bdId ?? null,
+    })
     .returning({ id: objectives.id });
+  return row.id;
+}
+
+export interface SeedMilestoneOpts {
+  title?: string;
+  status?: string;
+  metricTarget?: number;
+  metricCurrent?: number;
+  metricUnit?: string;
+  metricDirection?: "up" | "down";
+  position?: number;
+}
+
+export async function seedMilestone(
+  projectId: string,
+  objectiveId: string,
+  opts: SeedMilestoneOpts = {},
+): Promise<string> {
+  const [row] = await ownerDb
+    .insert(milestones)
+    .values({
+      projectId,
+      objectiveId,
+      title: opts.title ?? "vitest milestone",
+      status: opts.status ?? "pending",
+      metricTarget: opts.metricTarget !== undefined ? String(opts.metricTarget) : null,
+      metricCurrent: opts.metricCurrent !== undefined ? String(opts.metricCurrent) : null,
+      metricUnit: opts.metricUnit ?? null,
+      metricDirection: opts.metricDirection ?? null,
+      position: opts.position ?? null,
+    })
+    .returning({ id: milestones.id });
   return row.id;
 }
 
@@ -140,13 +193,20 @@ export async function enrollAgent(scopes: string[], displayName: string): Promis
 export async function cleanupAndClose(projectIds: string[]): Promise<void> {
   try {
     for (const pid of projectIds) {
-      // FK order: facts/learnings → artifacts/workflow_runs; artifacts/checkins →
-      // workflow_runs; workflow_runs → objectives; objectives → projects.
+      // FK order: facts/learnings → artifacts/workflow_runs; artifacts/checkins/milestones →
+      // workflow_runs/objectives; workflow_runs/milestones → objectives; objectives → projects.
       await ownerDb.delete(facts).where(eq(facts.projectId, pid));
       await ownerDb.delete(learnings).where(eq(learnings.projectId, pid));
       await ownerDb.delete(checkins).where(eq(checkins.projectId, pid));
       await ownerDb.delete(artifacts).where(eq(artifacts.projectId, pid));
+      await ownerDb.delete(milestones).where(eq(milestones.projectId, pid));
       await ownerDb.delete(workflowRuns).where(eq(workflowRuns.projectId, pid));
+      // NULL the objectives self-FKs (parent_id, supersedes_id) first so a bulk delete can't
+      // violate the self-reference mid-statement (parent removed before its child row).
+      await ownerDb
+        .update(objectives)
+        .set({ parentId: null, supersedesId: null })
+        .where(eq(objectives.projectId, pid));
       await ownerDb.delete(objectives).where(eq(objectives.projectId, pid));
       await ownerDb.delete(projects).where(eq(projects.id, pid));
     }

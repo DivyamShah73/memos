@@ -12,3 +12,8 @@ export * from "./schemas/fact.record.js";
 export * from "./schemas/learning.record.js";
 export * from "./schemas/fact.query.js";
 export * from "./schemas/learning.query.js";
+export * from "./schemas/objective.publish.js";
+export * from "./schemas/objective.query.js";
+export * from "./schemas/objective.update.js";
+export * from "./schemas/milestone.achieve.js";
+export * from "./schemas/key_result.update.js";
