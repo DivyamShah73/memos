@@ -16,4 +16,5 @@ bash testing/phase3.sh   # artifacts + evidence-gated writes (THE core invariant
 bash testing/phase4.sh   # query (FTS over facts/learnings)
 bash testing/phase5.sh   # okrs (goals + rollups)
 bash testing/phase6.sh   # briefs + questions + governance critic
+bash testing/phase7.sh   # dashboard read surface + live SSE stream
 echo "=== ALL PHASES GREEN ==="

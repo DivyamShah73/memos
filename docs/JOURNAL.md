@@ -308,3 +308,34 @@ surfacing as a brief, the critic filing + idempotency, escalation skipping acked
 `drizzle-kit generate` no-diff (0007 is hand-authored RLS, like 0002/0004). `testing/phase6.sh`
 proves the loop over HTTP (seed an unbacked medium learning → run the critic worker → a
 compliance brief appears → ack → gone → question round-trip). `smoke_all` now chains 0–6.
+
+---
+
+## 2026-06-23 — Phase 7: Dashboard core (the showpiece, part 1)
+
+The backend goes **visible**. A Next.js 15 (App Router) operator console with an **OKR tree**
+(weighted rollup bars) and a **live activity feed** that updates in real time as agents write.
+**ADR-007** pins the two architecture calls: the local stack has no Supabase and no operator
+table, so (1) the dashboard reads **through the gateway** — the Next.js *server* calls the intent
+endpoints as a seeded **operator agent** (an ordinary `agents` row scoped to `project.demo`),
+token held in a non-`NEXT_PUBLIC_` env var so it never reaches the browser; the UI is therefore
+bound by the *same* RLS + evidence rules as any agent, reusing all the isolation work. And (2) the
+live feed is **Server-Sent Events** from the gateway fed by an in-process event bus
+(`core/events.ts`): the write handlers `publishActivity` **after commit**, a `GET
+/v1/stream/activity` route streams project-filtered frames, and a Next.js `/api/stream` route
+proxies it with the operator token (token stays server-side). Two small read intents support the
+UI — `activity.recent` (the feed's initial page, a scoped union of recent checkins/facts/
+learnings) and `agent.me` (the operator's scopes). Login is a lightweight signed-cookie demo gate
+(`DEMO_PASSWORD` + HMAC), explicitly not production auth.
+
+Two gotchas worth noting: the demo seed (`pnpm db:seed`) hung until it closed the postgres-js
+pool + `process.exit` (an open pool keeps the event loop alive); and the Next **edge** middleware
+can't import `node:crypto`, so the session-cookie *name* had to move to a crypto-free module the
+middleware imports (the HMAC stays in the Node-runtime `session.ts`).
+
+Gate green: `pnpm typecheck` clean (web now in the fan-out); `pnpm --filter @memos/api test` →
+**102** still green; `pnpm --filter @memos/web build` clean; `testing/phase7.sh` proves the
+read surface + a live SSE frame over HTTP (post a fact → an `event: activity` frame arrives); and
+**Playwright** drives the real browser end-to-end — log in → the seeded OKR tree renders → a fact
+posted to the gateway **appears in the feed within ~1s without a refresh**. `smoke_all` now chains
+0–7. The two showpieces (OKR rollups + the live feed) are live; the provenance graph is Phase 8.

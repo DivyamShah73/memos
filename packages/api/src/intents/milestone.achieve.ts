@@ -9,6 +9,7 @@ import type { MilestoneAchieveInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
+import { publishActivity } from "../core/events.js";
 import { assertEvidence, assertRunWritable } from "./_evidence.js";
 import { recomputeObjectiveProgress } from "./_okr.js";
 import { milestones } from "../db/schema.js";
@@ -78,6 +79,16 @@ export async function milestoneAchieve(
     });
 
     if (result.kind === "validation") return fail(result.message, ERROR_TYPE.badRequest);
+
+    // Post-commit: surface the achievement on the live activity feed (Phase 7).
+    publishActivity({
+      type: "milestone",
+      projectId: project_id,
+      agentId: agent.id,
+      summary: `achieved: ${claim}`,
+      ts: new Date().toISOString(),
+      bdId: bd_id,
+    });
     return ok({
       milestone_id,
       status: "achieved",

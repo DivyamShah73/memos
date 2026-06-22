@@ -6,6 +6,7 @@ import type { FactRecordInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
+import { publishActivity } from "../core/events.js";
 import { assertEvidence, assertRunWritable } from "./_evidence.js";
 import { facts as factsTable } from "../db/schema.js";
 
@@ -46,6 +47,19 @@ export async function factRecord(ctx: IntentContext, input: FactRecordInput): Pr
     });
 
     if (result.kind === "error") return fail(result.message, ERROR_TYPE.badRequest);
+
+    // Post-commit: surface each fact on the live activity feed (Phase 7).
+    const ts = new Date().toISOString();
+    for (const f of facts) {
+      publishActivity({
+        type: "fact",
+        projectId: project_id,
+        agentId: agent.id,
+        summary: f.claim,
+        ts,
+        bdId: bd_id,
+      });
+    }
     return ok({ fact_ids: result.ids });
   } catch (err) {
     if (isRlsViolation(err)) {

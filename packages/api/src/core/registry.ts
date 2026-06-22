@@ -5,6 +5,8 @@
  */
 import type { ZodTypeAny } from "zod";
 import {
+  activityRecentInputSchema,
+  agentMeInputSchema,
   artifactUploadInputSchema,
   briefAckInputSchema,
   briefFetchInputSchema,
@@ -42,6 +44,8 @@ import { briefFetch } from "../intents/brief.fetch.js";
 import { briefAck } from "../intents/brief.ack.js";
 import { questionAsk } from "../intents/question.ask.js";
 import { questionAnswer } from "../intents/question.answer.js";
+import { activityRecent } from "../intents/activity.recent.js";
+import { agentMe } from "../intents/agent.me.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -186,6 +190,22 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: questionAnswerInputSchema,
       handler: questionAnswer as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "activity.recent",
+    {
+      schema: activityRecentInputSchema,
+      handler: activityRecent as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "agent.me",
+    {
+      schema: agentMeInputSchema,
+      handler: agentMe as IntentDef["handler"],
       requiresAuth: true,
     },
   ],
