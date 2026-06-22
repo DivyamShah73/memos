@@ -3,5 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "$comment": "Placeholder. Async critics, DOK grader, and escalation sweeps are built from Phase 6. No typecheck/test script in Phase 0 so the root fan-out skips it."
+  "$comment": "Thin runtime shims for the governance workers. The typed logic + tests live in @memos/api/governance (Phase 6, ADR-006); these scripts just run it. No typecheck script so the root fan-out skips this runtime-only package.",
+  "scripts": {
+    "critic:evidence": "tsx src/critic-evidence.ts",
+    "briefs:escalate": "tsx src/escalate.ts"
+  },
+  "dependencies": {
+    "@memos/api": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
 }
