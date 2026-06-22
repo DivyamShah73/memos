@@ -27,8 +27,18 @@ export function publishActivity(event: ActivityEvent): void {
   bus.emit(CHANNEL, event);
 }
 
-/** Subscribe to activity events; returns an unsubscribe function (call on disconnect). */
+/** Subscribe to activity events; returns an unsubscribe function (call on disconnect).
+ * The listener is wrapped so a throwing subscriber can never escape into publishActivity's
+ * caller — publish runs post-commit in the write handlers, so a subscriber error must not turn
+ * an already-committed write into a 500. */
 export function subscribeActivity(listener: (event: ActivityEvent) => void): () => void {
-  bus.on(CHANNEL, listener);
-  return () => bus.off(CHANNEL, listener);
+  const safe = (event: ActivityEvent): void => {
+    try {
+      listener(event);
+    } catch (err) {
+      console.error("activity subscriber error:", err);
+    }
+  };
+  bus.on(CHANNEL, safe);
+  return () => bus.off(CHANNEL, safe);
 }

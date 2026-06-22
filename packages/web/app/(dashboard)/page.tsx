@@ -8,9 +8,15 @@ export const dynamic = "force-dynamic";
 const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
 
 export default async function DashboardPage() {
+  // Degrade gracefully: a gateway business-rule failure (envelope ok:false → thrown) should render
+  // an empty dashboard, not Next's error boundary. The gateway stays the source of truth.
   const [okr, act] = await Promise.all([
-    callIntent<{ objectives: ObjectiveNode[] }>("objective.query", { project_id: PROJECT }),
-    callIntent<{ activity: ActivityItem[] }>("activity.recent", { project_id: PROJECT, limit: 30 }),
+    callIntent<{ objectives: ObjectiveNode[] }>("objective.query", { project_id: PROJECT }).catch(
+      () => ({ objectives: [] as ObjectiveNode[] }),
+    ),
+    callIntent<{ activity: ActivityItem[] }>("activity.recent", { project_id: PROJECT, limit: 30 }).catch(
+      () => ({ activity: [] as ActivityItem[] }),
+    ),
   ]);
 
   return (

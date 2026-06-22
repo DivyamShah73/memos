@@ -45,7 +45,13 @@ app.get("/v1/stream/activity", async (c) => {
   if (!agent) return c.json(unauthorized, 401);
 
   const projectId = c.req.query("project_id") ?? "";
-  if (!projectId || !agent.scopes.includes(projectId)) {
+  if (!projectId) {
+    return c.json(
+      { ok: false, error: "project_id: is required", detail: { field_errors: { project_id: ["is required"] } }, error_type: ERROR_TYPE.validation },
+      400,
+    );
+  }
+  if (!agent.scopes.includes(projectId)) {
     return c.json({ ok: false, error: `project ${projectId} is not in scope`, detail: {}, error_type: ERROR_TYPE.forbidden }, 403);
   }
 
@@ -53,9 +59,14 @@ app.get("/v1/stream/activity", async (c) => {
   c.header("X-Accel-Buffering", "no"); // disable proxy buffering so frames flush immediately
   return streamSSE(c, async (stream) => {
     // The emitter callback is sync; buffer events and drain them in the loop (writeSSE is async).
+    // Cap the queue so a stalled consumer + sustained writes can't grow the heap without bound;
+    // on overflow we drop the oldest (the feed is best-effort, newest-first).
+    const MAX_QUEUE = 500;
     let queue: ActivityEvent[] = [];
     const unsubscribe = subscribeActivity((ev) => {
-      if (ev.projectId === projectId) queue.push(ev);
+      if (ev.projectId !== projectId) return;
+      queue.push(ev);
+      if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
     });
     stream.onAbort(unsubscribe);
 

@@ -4,14 +4,14 @@
  * isolation as fact.query). The live tail then arrives via the SSE stream. checkins carry no
  * agent_id, so we join the workflow run to attribute them.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { ActivityRecentInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
-import { checkins, facts, learnings, workflowRuns } from "../db/schema.js";
+import { checkins, facts, learnings, milestones, workflowRuns } from "../db/schema.js";
 
 interface FeedItem {
-  type: "checkin" | "fact" | "learning";
+  type: "checkin" | "fact" | "learning" | "milestone";
   summary: string;
   agent_id: string | null;
   bd_id: string | null;
@@ -31,7 +31,7 @@ export async function activityRecent(
     return fail(`project ${project_id} is not in scope`, ERROR_TYPE.forbidden);
   }
 
-  const { factRows, learningRows, checkinRows } = await withScope(async (tx) => {
+  const { factRows, learningRows, checkinRows, milestoneRows } = await withScope(async (tx) => {
     const factRows = await tx
       .select({ claim: facts.claim, agentId: facts.agentId, bdId: facts.bdId, createdAt: facts.createdAt })
       .from(facts)
@@ -57,7 +57,17 @@ export async function activityRecent(
       .where(eq(checkins.projectId, project_id))
       .orderBy(desc(checkins.createdAt))
       .limit(limit);
-    return { factRows, learningRows, checkinRows };
+    const milestoneRows = await tx
+      .select({
+        title: milestones.title,
+        achievement: milestones.achievement,
+        achievedAt: milestones.achievedAt,
+      })
+      .from(milestones)
+      .where(and(eq(milestones.projectId, project_id), eq(milestones.status, "achieved")))
+      .orderBy(desc(milestones.achievedAt))
+      .limit(limit);
+    return { factRows, learningRows, checkinRows, milestoneRows };
   });
 
   const items: FeedItem[] = [
@@ -70,6 +80,15 @@ export async function activityRecent(
       bd_id: r.bdId,
       created_at: r.createdAt,
     })),
+    ...milestoneRows
+      .filter((r) => r.achievedAt !== null)
+      .map((r) => ({
+        type: "milestone" as const,
+        summary: `achieved: ${r.title}`,
+        agent_id: (r.achievement as { agent_id?: string } | null)?.agent_id ?? null,
+        bd_id: null,
+        created_at: r.achievedAt as Date,
+      })),
   ];
   items.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
 
