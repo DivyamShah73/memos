@@ -36,14 +36,23 @@ export type WithScope = <T>(fn: (tx: ScopedTx) => Promise<T>) => Promise<T>;
 
 /**
  * Build the agent-bound `withScope` helper. Runs `fn` inside a transaction whose first
- * statement sets `memos.agent_projects` to the agent's scopes, so RLS sees exactly the
- * agent's projects for the duration.
+ * statements set the two request-local GUCs so RLS sees exactly this agent:
+ *  - `memos.agent_projects` — the project scopes (project-scoped tables: facts, objectives, …).
+ *  - `memos.agent_identity` — the full identity set {agent.x, team.x, org, project.*}, for the
+ *    identity-targeted `briefs` policy (Phase 6 / ADR-006).
+ * `identity` defaults to `scopes` so every existing caller keeps working unchanged.
  */
-export function makeWithScope(db: GatewayDb, scopes: string[]): WithScope {
-  const literal = toPgArrayLiteral(scopes);
+export function makeWithScope(
+  db: GatewayDb,
+  scopes: string[],
+  identity: string[] = scopes,
+): WithScope {
+  const projectsLiteral = toPgArrayLiteral(scopes);
+  const identityLiteral = toPgArrayLiteral(identity);
   return function withScope<T>(fn: (tx: ScopedTx) => Promise<T>): Promise<T> {
     return db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('memos.agent_projects', ${literal}, true)`);
+      await tx.execute(sql`select set_config('memos.agent_projects', ${projectsLiteral}, true)`);
+      await tx.execute(sql`select set_config('memos.agent_identity', ${identityLiteral}, true)`);
       return fn(tx);
     });
   };
