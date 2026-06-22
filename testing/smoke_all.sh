@@ -15,5 +15,5 @@ bash testing/phase2.sh   # workflow + checkin (provenance spine)
 bash testing/phase3.sh   # artifacts + evidence-gated writes (THE core invariant)
 bash testing/phase4.sh   # query (FTS over facts/learnings)
 bash testing/phase5.sh   # okrs (goals + rollups)
-# bash testing/phase6.sh   # briefs + critic      (added in Phase 6)
+bash testing/phase6.sh   # briefs + questions + governance critic
 echo "=== ALL PHASES GREEN ==="

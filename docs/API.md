@@ -181,4 +181,40 @@ curl -s -X POST $API/v1/intent/objective.query -H "authorization: Bearer $TOK" -
   -d "{\"project_id\":\"project.demo\",\"objective_id\":\"$OBJ_ID\"}"
 ```
 
-*More intents are added per phase (brief.*, question.*, … ) — see `docs/PHASED_BUILD_PLAN.md`.*
+### `brief.fetch` — standing instructions targeting this agent + active OKRs
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "include_acked"?: boolean (default false) }`
+- **Returns:** `{ "briefs": [{ "id", "title", "body", "target_kind", "target_id", "effective_from", "created_at" }], "active_okrs": [{ "id", "title", "status", "progress", "target_completion" }] }`
+- **Notes:** returns briefs targeting the agent's identity (its agent id, team, org, or this project) — isolation enforced by RLS on a `memos.agent_identity` GUC (ADR-006). Superseded briefs and (unless `include_acked`) already-acked briefs are excluded. `active_okrs` are the project's active root objectives with rolled-up progress.
+
+### `brief.ack` — acknowledge a brief
+- **Auth:** bearer.
+- **Input:** `{ "brief_id": uuid }`
+- **Returns:** `{ "brief_id": uuid, "acked": true }`
+- **Notes:** idempotent. The brief must be visible to the agent (a brief targeted at someone else → `ok:false` "brief not found"). Acking removes it from the next `brief.fetch` unless `include_acked`.
+
+### `question.ask` — ask the operator (answered back as a brief)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id"?: string, "subject"?: string, "body": string, "urgency"?: "low"|"medium"|"high" }`
+- **Returns:** `{ "question_id": uuid }`
+- **Notes:** scoped to the project; optionally threaded onto an open run (`bd_id`). The answer arrives later as an agent-targeted brief.
+
+### `question.answer` — answer a question (delivers a brief to the asker)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "question_id": uuid, "answer": string }`
+- **Returns:** `{ "question_id": uuid, "brief_id": uuid }`
+- **Notes:** marks the question answered and files an `agent`-targeted brief (`title: "Re: <subject>"`, `body: answer`) at the asker. An already-answered question → `ok:false`.
+
+```bash
+# fetch briefs + active OKRs
+curl -s -X POST $API/v1/intent/brief.fetch -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
+  -d '{"project_id":"project.demo"}'
+# → { "ok": true, "data": { "briefs": [ … ], "active_okrs": [ … ] } }
+```
+
+### Governance workers (not intents)
+Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/governance`):
+- `pnpm --filter @memos/workers run critic:evidence` — files a brief at any agent with a medium/high fact or learning that lacks evidence (the evidence-gate compliance critic).
+- `pnpm --filter @memos/workers run briefs:escalate` — escalates agent briefs unacked for >24h to the agent's team.
+
+*More intents are added per phase (feedback.submit, choice.log, … ) — see `docs/PHASED_BUILD_PLAN.md`.*
