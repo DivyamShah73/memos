@@ -212,6 +212,31 @@ curl -s -X POST $API/v1/intent/brief.fetch -H "authorization: Bearer $TOK" -H 'c
 # → { "ok": true, "data": { "briefs": [ … ], "active_okrs": [ … ] } }
 ```
 
+### `activity.recent` — recent feed items for the dashboard
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "limit"?: number (default 30, max 50) }`
+- **Returns:** `{ "activity": [{ "type": "checkin"|"fact"|"learning", "summary": string, "agent_id": string|null, "bd_id": string|null, "created_at": ts }] }`
+- **Notes:** the initial page of the live feed — a unified, newest-first view of recent checkins/facts/learnings in one project (RLS + explicit project filter). The live tail then arrives over the SSE stream below.
+
+### `agent.me` — the calling agent's identity + scopes
+- **Auth:** bearer.
+- **Input:** `{}`
+- **Returns:** `{ "agent_id": string, "scopes": string[], "team_id": string|null, "org_id": string|null }`
+- **Notes:** lets a client (the dashboard) discover which projects its token can see, without hardcoding.
+
+### `GET /v1/stream/activity` — live activity stream (SSE, not an intent)
+- **Auth:** `Authorization: Bearer …`; agent scoped to the `project_id` query param.
+- **Query:** `?project_id=<id>`
+- **Returns:** an `text/event-stream` of `event: activity` frames (`data` = the activity event JSON: `{ type, projectId, agentId, summary, ts, bdId }`), plus a `ready` frame on connect and `ping` heartbeats. Write intents publish to an in-process bus **after commit**, so the stream reflects only durable writes (ADR-007).
+
+```bash
+curl -N -H "authorization: Bearer $TOK" "$API/v1/stream/activity?project_id=project.demo"
+# event: ready
+# data: {"project_id":"project.demo"}
+# event: activity
+# data: {"type":"fact","summary":"p99 dropped…","agentId":"agent.x","ts":"…"}
+```
+
 ### Governance workers (not intents)
 Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/governance`):
 - `pnpm --filter @memos/workers run critic:evidence` — files a brief at any agent with a medium/high fact or learning that lacks evidence (the evidence-gate compliance critic).
