@@ -72,4 +72,13 @@ describe("objective.query", () => {
     expect(child.milestones[0]).toHaveProperty("metric_target", 100);
     expect(child.milestones[0]).toHaveProperty("progress", 1);
   });
+
+  it("a never-measured down-direction KR is 0%, not 100%", async () => {
+    // Regression: a 'down' KR with no metric_current must not read as achieved (0 <= target).
+    const obj = await seedObjective(A, { title: "fresh down" });
+    await seedMilestone(A, obj, { metricTarget: 200, metricDirection: "down" }); // no current
+    const { json } = await call("objective.query", token, { project_id: A, objective_id: obj });
+    expect(json.data.objectives[0].milestones[0].progress).toBe(0);
+    expect(json.data.objectives[0].progress).toBe(0);
+  });
 });

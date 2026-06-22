@@ -57,7 +57,8 @@ export function indexObjectives(
 
 const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
 
-const num = (v: string | number | null | undefined): number | null => {
+/** Parse a numeric column (postgres-js returns `numeric` as a string) to a finite number or null. */
+export const num = (v: string | number | null | undefined): number | null => {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
@@ -68,7 +69,11 @@ export function krProgress(m: MilestoneRow): number {
   if (m.status === "achieved") return 1; // explicit achievement = 100%
   const t = num(m.metricTarget);
   if (t === null) return 0; // plain pending milestone, no metric
-  const c = num(m.metricCurrent) ?? 0;
+  const c = num(m.metricCurrent);
+  // No measurement yet → 0 progress. Critically for `down` (lower-is-better): coercing a missing
+  // current to 0 would satisfy `0 <= target` and falsely report 100% on a brand-new KR. An
+  // EXPLICIT current of 0 is preserved below (0 <= target → at/below target → achieved).
+  if (c === null) return 0;
   if (m.metricDirection === "down") {
     if (c <= t) return 1; // at or below the target (lower is better)
     return c === 0 ? 0 : clamp01(t / c);

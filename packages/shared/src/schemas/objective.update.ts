@@ -8,7 +8,6 @@ export const objectiveUpdateInputSchema = z
   .object({
     project_id: z.string().min(1, "is required"),
     objective_id: z.string().uuid(),
-    bd_id: z.string().min(1).optional(),
     title: z.string().min(1).optional(),
     description: z.string().optional(),
     target_completion: z.string().datetime().optional(),

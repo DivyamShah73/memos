@@ -8,10 +8,8 @@ import { eq } from "drizzle-orm";
 import type { ObjectiveQueryInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
-import { indexObjectives, krProgress, objectiveProgress, type ObjectiveRow } from "./_okr.js";
+import { indexObjectives, krProgress, num, objectiveProgress, type ObjectiveRow } from "./_okr.js";
 import { milestones, objectives } from "../db/schema.js";
-
-const numOrNull = (v: string | null): number | null => (v === null ? null : Number(v));
 
 export async function objectiveQuery(
   ctx: IntentContext,
@@ -74,7 +72,7 @@ export async function objectiveQuery(
     title: o.title,
     description: o.description,
     status: o.status,
-    weight: numOrNull(o.weight),
+    weight: num(o.weight),
     target_completion: o.targetCompletion,
     progress: objectiveProgress(o as ObjectiveRow, childrenByParent, milestonesByObjective),
     milestones: (milestonesByObjective.get(o.id) ?? []).map((m) => {
@@ -84,8 +82,8 @@ export async function objectiveQuery(
         title: mm.title,
         status: mm.status,
         position: mm.position,
-        metric_target: numOrNull(mm.metricTarget),
-        metric_current: numOrNull(mm.metricCurrent),
+        metric_target: num(mm.metricTarget),
+        metric_current: num(mm.metricCurrent),
         metric_unit: mm.metricUnit,
         metric_direction: mm.metricDirection,
         progress: krProgress(mm),

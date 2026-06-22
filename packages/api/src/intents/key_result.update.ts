@@ -59,6 +59,11 @@ export async function keyResultUpdate(
       if (found[0].metricTarget === null) {
         return { kind: "validation", message: "milestone has no metric_target; not a key result" };
       }
+      // Once achieved, the metric is frozen — it backs the achievement snapshot. Overwriting it
+      // would silently diverge the stored current from what was claimed at achievement time.
+      if (found[0].status === "achieved") {
+        return { kind: "validation", message: "milestone already achieved; metric is frozen" };
+      }
 
       await tx
         .update(milestones)
