@@ -46,10 +46,24 @@ export async function questionAnswer(
         return { kind: "validation", message: "question already answered" };
       }
 
-      await tx
+      // Atomic flip: gate the UPDATE on status='open' and check it actually changed a row.
+      // Two concurrent answerers both pass the SELECT above, but only the one whose UPDATE
+      // wins the open→answered transition proceeds to file the brief — the loser updates 0
+      // rows and bails, so no duplicate answer brief.
+      const updated = await tx
         .update(questions)
         .set({ answer, status: "answered" })
-        .where(and(eq(questions.id, question_id), eq(questions.projectId, project_id)));
+        .where(
+          and(
+            eq(questions.id, question_id),
+            eq(questions.projectId, project_id),
+            eq(questions.status, "open"),
+          ),
+        )
+        .returning({ id: questions.id });
+      if (updated.length === 0) {
+        return { kind: "validation", message: "question already answered" };
+      }
 
       const subject = found[0].subject ?? "your question";
       const [brief] = await tx

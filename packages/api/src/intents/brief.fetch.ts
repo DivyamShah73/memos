@@ -11,7 +11,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { BriefFetchInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
-import { indexObjectives, num, objectiveProgress, type ObjectiveRow } from "./_okr.js";
+import { indexObjectives, objectiveProgress, type ObjectiveRow } from "./_okr.js";
 import { briefs, milestones, objectives } from "../db/schema.js";
 
 export async function briefFetch(ctx: IntentContext, input: BriefFetchInput): Promise<Envelope> {

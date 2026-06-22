@@ -4,11 +4,10 @@
  * (sees all tenants). Idempotent via a stable marker `<!-- memos:escalation src=brief:… -->`.
  * `now` is injectable so tests don't depend on wall-clock.
  */
-import { and, eq, lt, like } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { db as ownerDb } from "../db/index.js";
 import { agents, briefAcks, briefs } from "../db/schema.js";
-
-type DB = typeof ownerDb;
+import { insertBriefIdempotent, type DB } from "./_briefs.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -22,14 +21,36 @@ export async function runBriefEscalation(
 ): Promise<EscalationResult> {
   const cutoff = new Date(now.getTime() - DAY_MS);
 
+  // Fetch candidates in one query: agent-targeted briefs older than the cutoff that have not
+  // been acked by their target and whose agent has a team to escalate to. The acked check is a
+  // LEFT JOIN … IS NULL anti-join (no per-row round-trip); the teamId is fetched via a JOIN on
+  // agents so no secondary lookup is needed either.
   const candidates = await database
-    .select({ id: briefs.id, targetId: briefs.targetId, title: briefs.title })
+    .select({
+      id: briefs.id,
+      targetId: briefs.targetId,
+      title: briefs.title,
+      teamId: agents.teamId,
+    })
     .from(briefs)
-    .where(and(eq(briefs.targetKind, "agent"), lt(briefs.effectiveFrom, cutoff)));
+    .leftJoin(agents, eq(agents.id, briefs.targetId))
+    .leftJoin(briefAcks, and(eq(briefAcks.briefId, briefs.id), eq(briefAcks.agentId, briefs.targetId)))
+    .where(
+      and(
+        eq(briefs.targetKind, "agent"),
+        lt(briefs.effectiveFrom, cutoff),
+        isNull(briefAcks.briefId),   // anti-join: not acked by target
+        isNotNull(agents.teamId),    // only escalate when agent has a team
+      ),
+    );
 
   let escalated = 0;
   for (const b of candidates) {
-    // Skip if a newer brief already supersedes this one.
+    // teamId is guaranteed non-null by the isNotNull filter in the query above.
+
+    // Skip if a newer brief already supersedes this one. This is a self-referential join on
+    // a different column (supersedes_id = candidate.id) that cannot be expressed as a simple
+    // equi-join in the initial query, so one query per candidate remains here.
     const superseded = await database
       .select({ id: briefs.id })
       .from(briefs)
@@ -37,41 +58,16 @@ export async function runBriefEscalation(
       .limit(1);
     if (superseded.length > 0) continue;
 
-    // Skip if the target agent has acked it.
-    const acked = await database
-      .select({ briefId: briefAcks.briefId })
-      .from(briefAcks)
-      .where(and(eq(briefAcks.briefId, b.id), eq(briefAcks.agentId, b.targetId)))
-      .limit(1);
-    if (acked.length > 0) continue;
-
-    // Skip if already escalated.
     const marker = `<!-- memos:escalation src=brief:${b.id} -->`;
-    const already = await database
-      .select({ id: briefs.id })
-      .from(briefs)
-      .where(like(briefs.body, `%${marker}%`))
-      .limit(1);
-    if (already.length > 0) continue;
-
-    // Escalate to the agent's team.
-    const agentRow = await database
-      .select({ teamId: agents.teamId })
-      .from(agents)
-      .where(eq(agents.id, b.targetId))
-      .limit(1);
-    const teamId = agentRow[0]?.teamId;
-    if (!teamId) continue;
-
-    await database.insert(briefs).values({
+    const inserted = await insertBriefIdempotent(database, marker, {
       title: `Escalation: unacked brief "${b.title}"`,
-      body:
-        `Agent ${b.targetId} has not acknowledged a brief for over 24h. Escalating to the team.\n\n${marker}`,
+      body: `Agent ${b.targetId} has not acknowledged a brief for over 24h. Escalating to the team.\n\n${marker}`,
       targetKind: "team",
-      targetId: teamId,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      targetId: b.teamId!, // non-null: isNotNull(agents.teamId) filtered nulls in the query
       authorId: "governance.escalation",
     });
-    escalated++;
+    if (inserted) escalated++;
   }
 
   return { escalated };

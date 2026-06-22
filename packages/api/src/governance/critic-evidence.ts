@@ -8,11 +8,10 @@
  * Idempotent: each filed brief carries a stable marker `<!-- memos:critic:evidence src=… -->`;
  * a re-run skips violations already briefed.
  */
-import { and, eq, isNull, like, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { db as ownerDb } from "../db/index.js";
-import { briefs, facts, learnings } from "../db/schema.js";
-
-type DB = typeof ownerDb;
+import { facts, learnings } from "../db/schema.js";
+import { insertBriefIdempotent, type DB } from "./_briefs.js";
 
 export interface CriticResult {
   scanned: number;
@@ -40,14 +39,7 @@ export async function runEvidenceCritic(database: DB = ownerDb): Promise<CriticR
   for (const v of violations) {
     if (!v.agentId) continue; // can't target an unknown author
     const marker = `<!-- memos:critic:evidence src=${v.kind}:${v.id} -->`;
-    const existing = await database
-      .select({ id: briefs.id })
-      .from(briefs)
-      .where(like(briefs.body, `%${marker}%`))
-      .limit(1);
-    if (existing.length > 0) continue; // already briefed → idempotent
-
-    await database.insert(briefs).values({
+    const inserted = await insertBriefIdempotent(database, marker, {
       title: "Evidence gate: unbacked claim recorded",
       body:
         `A ${v.kind} was recorded at medium/high confidence with no evidence artifact:\n\n` +
@@ -57,7 +49,7 @@ export async function runEvidenceCritic(database: DB = ownerDb): Promise<CriticR
       targetId: v.agentId,
       authorId: "critic.evidence",
     });
-    filed++;
+    if (inserted) filed++;
   }
 
   return { scanned: violations.length, filed };

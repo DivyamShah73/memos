@@ -51,8 +51,10 @@ export function makeWithScope(
   const identityLiteral = toPgArrayLiteral(identity);
   return function withScope<T>(fn: (tx: ScopedTx) => Promise<T>): Promise<T> {
     return db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('memos.agent_projects', ${projectsLiteral}, true)`);
-      await tx.execute(sql`select set_config('memos.agent_identity', ${identityLiteral}, true)`);
+      await tx.execute(
+        sql`select set_config('memos.agent_projects', ${projectsLiteral}, true),
+                   set_config('memos.agent_identity', ${identityLiteral}, true)`,
+      );
       return fn(tx);
     });
   };
