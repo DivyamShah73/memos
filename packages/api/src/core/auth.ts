@@ -6,12 +6,14 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { agents } from "../db/schema.js";
+import { agents, teams } from "../db/schema.js";
 import type { GatewayDb } from "../db/gateway.js";
 
 export interface AuthedAgent {
   id: string;
   teamId: string | null;
+  /** Org owning the agent's team — resolved via teams. Used to target org-level briefs (Phase 6). */
+  orgId: string | null;
   scopes: string[];
   trustScore: string;
 }
@@ -46,10 +48,12 @@ export async function resolveAgent(
     .select({
       id: agents.id,
       teamId: agents.teamId,
+      orgId: teams.orgId,
       scopes: agents.scopes,
       trustScore: agents.trustScore,
     })
     .from(agents)
+    .leftJoin(teams, eq(agents.teamId, teams.id))
     .where(and(eq(agents.apiTokenHash, hash), eq(agents.status, "active")))
     .limit(1);
   const a = rows[0];
@@ -57,6 +61,7 @@ export async function resolveAgent(
   return {
     id: a.id,
     teamId: a.teamId,
+    orgId: a.orgId ?? null,
     scopes: a.scopes ?? [],
     trustScore: a.trustScore,
   };

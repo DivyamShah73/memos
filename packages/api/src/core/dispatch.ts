@@ -93,7 +93,14 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
 
     // 6. Handler. Authed intents get an agent-bound `withScope` for RLS-protected tables.
     const ctx: IntentContext = { agent, db: gatewayDb, clientIp: input.clientIp };
-    if (agent) ctx.withScope = makeWithScope(gatewayDb, agent.scopes);
+    if (agent) {
+      // Identity set for the briefs RLS policy: the agent's own id, its team, its org, and its
+      // project scopes — every value a brief's target_id could match (ADR-006). Dedup + drop nulls.
+      const identity = [
+        ...new Set([agent.id, agent.teamId, agent.orgId, ...agent.scopes].filter(Boolean)),
+      ] as string[];
+      ctx.withScope = makeWithScope(gatewayDb, agent.scopes, identity);
+    }
     const body = await entry.handler(ctx, result.data as never);
     return done(body);
   } catch (err) {

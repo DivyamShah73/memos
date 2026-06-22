@@ -268,3 +268,43 @@ one script running the entire agent loop end-to-end (enroll → workflow → che
 evidence-gated fact + learning → query → publish OKR → kr.update → achieve → checkin complete)
 and asserting an evidence-less medium write is rejected. `smoke_all` now chains 0–5. **Day 1 is
 done** — the full backend agent loop works end-to-end with the core invariant holding.
+
+---
+
+## 2026-06-22 — Phase 6: briefs, questions, governance worker
+
+Day 2 opens with the **steering layer** + the first **autonomous governance**. Four intents —
+`brief.fetch` / `brief.ack`, `question.ask` / `question.answer` — plus two on-demand workers
+(`critic:evidence`, `briefs:escalate`). No new tables (Phase 0 built `briefs`/`brief_acks`/
+`questions`); the load-bearing change is finally giving briefs their **DB-level isolation**.
+
+Briefs are **identity-targeted** (org/team/project/agent), so the `memos.agent_projects` GUC
+doesn't fit. **ADR-006**: a second request-local GUC `memos.agent_identity` =
+`{agent.x, team.x, org, project.*}`, set alongside the project GUC in `makeWithScope`; the
+`briefs_select` policy is a single `target_id = ANY(identity)` membership test (the four id
+namespaces never collide, so no `target_kind` match needed). `resolveAgent` now left-joins
+`teams` for `orgId`. **Read-isolation is the boundary; INSERT is `WITH CHECK (true)`** — a brief
+is an outbound instruction, and `question.answer` files one targeting a *different* agent (the
+asker), so an identity-scoped write-check would wrongly reject it; there's no UPDATE/DELETE
+policy, so supersession is a new insert with `supersedes_id`. `brief.fetch` adds an explicit
+`(target_kind <> 'project' OR target_id = :project_id)` narrowing on top of RLS (the identity set
+spans all the agent's projects; a fetch targets one), hides superseded briefs, and — unless
+`include_acked` — hides acked ones; it also returns the project's `active_okrs` (reusing the
+`_okr.ts` rollup).
+
+The governance worker *brains* live in **`packages/api/src/governance/`** (typed, owner-db, with
+colocated tests against the real `_testutil` fixtures); `packages/workers` holds thin tsx runner
+shims that import them via a new `@memos/api/governance` export. Running as the **owner**
+(superuser) is deliberate — governance is a fleet-wide sweep that bypasses RLS — and the briefs
+it files are still read-isolated when agents fetch. `runEvidenceCritic` scans every project's
+facts+learnings for the evidence-gate violation (`confidence ≥ medium ∧ no evidence`) the API
+write-path forbids but a direct/seeded insert can introduce, and files a brief at the offender;
+it's idempotent via a stable in-body marker. `runBriefEscalation` escalates agent briefs unacked
+for >24h to the agent's team (`now` injectable for tests).
+
+Gate green: `pnpm typecheck` clean; **97 tests** (15 new: brief targeting incl. the
+**another-team-can't-see-it** identity-RLS proof, supersede/ack hiding, the question round-trip
+surfacing as a brief, the critic filing + idempotency, escalation skipping acked/fresh briefs);
+`drizzle-kit generate` no-diff (0007 is hand-authored RLS, like 0002/0004). `testing/phase6.sh`
+proves the loop over HTTP (seed an unbacked medium learning → run the critic worker → a
+compliance brief appears → ack → gone → question round-trip). `smoke_all` now chains 0–6.

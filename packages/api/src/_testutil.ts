@@ -6,21 +6,25 @@
  * cross-tenant data needs no GUC. The gateway (app) runs as memos_app, where RLS bites.
  */
 import { randomBytes } from "node:crypto";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray, like, or } from "drizzle-orm";
 import { app } from "./app.js";
 import { db as ownerDb, queryClient } from "./db/index.js";
 import { gatewayClient } from "./db/gateway.js";
 import {
   agents,
   artifacts,
+  briefAcks,
+  briefs,
   checkins,
   enrollmentCodes,
   facts,
+  feedback,
   learnings,
   milestones,
   objectives,
   orgs,
   projects,
+  questions,
   teams,
   workflowRuns,
 } from "./db/schema.js";
@@ -135,6 +139,64 @@ export async function seedWorkflowRun(projectId: string): Promise<string> {
   return bdId;
 }
 
+export interface SeedBriefOpts {
+  title?: string;
+  body?: string;
+  authorId?: string;
+  supersedesId?: string;
+  effectiveFrom?: Date;
+}
+
+/** Insert a brief via the owner client (bypasses RLS). targetKind ∈ org|team|project|agent. */
+export async function seedBrief(
+  targetKind: string,
+  targetId: string,
+  opts: SeedBriefOpts = {},
+): Promise<string> {
+  const [row] = await ownerDb
+    .insert(briefs)
+    .values({
+      title: opts.title ?? "vitest brief",
+      body: opts.body ?? "vitest brief body",
+      targetKind,
+      targetId,
+      authorId: opts.authorId ?? "vitest",
+      supersedesId: opts.supersedesId ?? null,
+      effectiveFrom: opts.effectiveFrom ?? undefined,
+    })
+    .returning({ id: briefs.id });
+  return row.id;
+}
+
+export interface SeedQuestionOpts {
+  bdId?: string;
+  subject?: string;
+  body?: string;
+  urgency?: "low" | "medium" | "high";
+  status?: string;
+}
+
+/** Insert a question via the owner client. */
+export async function seedQuestion(
+  projectId: string,
+  agentId: string,
+  opts: SeedQuestionOpts = {},
+): Promise<string> {
+  const [row] = await ownerDb
+    .insert(questions)
+    .values({
+      projectId,
+      agentId,
+      bdId: opts.bdId ?? null,
+      subject: opts.subject ?? "vitest question",
+      body: opts.body ?? "why?",
+      urgency: opts.urgency ?? null,
+      status: opts.status ?? "open",
+    })
+    .returning({ id: questions.id });
+  return row.id;
+}
+
 /** Insert an artifacts METADATA row via the owner client (no blob). For cite-check tests. */
 export async function seedArtifact(projectId: string, bdId: string): Promise<string> {
   const [row] = await ownerDb
@@ -208,8 +270,28 @@ export async function cleanupAndClose(projectIds: string[]): Promise<void> {
         .set({ parentId: null, supersedesId: null })
         .where(eq(objectives.projectId, pid));
       await ownerDb.delete(objectives).where(eq(objectives.projectId, pid));
+      await ownerDb.delete(questions).where(eq(questions.projectId, pid));
       await ownerDb.delete(projects).where(eq(projects.id, pid));
     }
+
+    // Briefs/acks/feedback are identity-targeted (not project-scoped). Clean up everything
+    // touching the vitest agents + test identities. Must precede the agents delete (brief_acks
+    // FKs agents). NULL supersedes_id first so the self-FK can't break a bulk delete.
+    const vitestAgents = await ownerDb
+      .select({ id: agents.id })
+      .from(agents)
+      .where(like(agents.displayName, "vitest-%"));
+    const agentIds = vitestAgents.map((a) => a.id);
+    if (agentIds.length > 0) {
+      await ownerDb.delete(briefAcks).where(inArray(briefAcks.agentId, agentIds));
+      await ownerDb.delete(feedback).where(inArray(feedback.agentId, agentIds));
+    }
+    const identityTargets = [TEST_ORG, TEST_TEAM, ...projectIds, ...agentIds];
+    const authorIds = ["vitest", "critic.evidence", "governance.escalation", ...agentIds];
+    const testBrief = or(inArray(briefs.targetId, identityTargets), inArray(briefs.authorId, authorIds));
+    await ownerDb.update(briefs).set({ supersedesId: null }).where(testBrief); // self-FK first
+    await ownerDb.delete(briefs).where(testBrief);
+
     await ownerDb.delete(agents).where(like(agents.displayName, "vitest-%"));
     await ownerDb.delete(enrollmentCodes).where(like(enrollmentCodes.code, "enr_code_vitest_%"));
     await ownerDb.delete(teams).where(eq(teams.id, TEST_TEAM));

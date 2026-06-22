@@ -50,6 +50,13 @@
       "when": 1781515939153,
       "tag": "0006_fts_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782126720000,
+      "tag": "0007_briefs_identity_rls",
+      "breakpoints": true
     }
   ]
 }

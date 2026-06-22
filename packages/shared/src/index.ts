@@ -17,3 +17,7 @@ export * from "./schemas/objective.query.js";
 export * from "./schemas/objective.update.js";
 export * from "./schemas/milestone.achieve.js";
 export * from "./schemas/key_result.update.js";
+export * from "./schemas/brief.fetch.js";
+export * from "./schemas/brief.ack.js";
+export * from "./schemas/question.ask.js";
+export * from "./schemas/question.answer.js";
