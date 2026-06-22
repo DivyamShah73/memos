@@ -10,3 +10,5 @@ export * from "./schemas/checkin.js";
 export * from "./schemas/artifact.upload.js";
 export * from "./schemas/fact.record.js";
 export * from "./schemas/learning.record.js";
+export * from "./schemas/fact.query.js";
+export * from "./schemas/learning.query.js";

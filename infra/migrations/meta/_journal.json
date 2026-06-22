@@ -43,6 +43,13 @@
       "when": 1781473792943,
       "tag": "0005_checkins_objective_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781515939153,
+      "tag": "0006_fts_indexes",
+      "breakpoints": true
     }
   ]
 }

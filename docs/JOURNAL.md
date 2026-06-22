@@ -183,3 +183,42 @@ ACCEPTED; `artifact.upload.test.ts`: sha256 roundtrip from MinIO + `information_
 of no `bytea` column). `testing/phase3.sh` runs the loop over HTTP and proves the gate (medium
 no-evidence rejected, with-evidence accepted, bytes not in Postgres). `smoke_all` now chains
 0–3.
+
+---
+
+## 2026-06-15 — Phase 4: query (find what's stored)
+
+`fact.query` / `learning.query` make the store readable so an agent can check before
+re-deriving. Baseline is **Postgres full-text search** (pgvector stays the documented
+cut-line). `plainto_tsquery('english', …)` (safe on arbitrary input — no tsquery operators,
+no injection) matched against `to_tsvector('english', claim)`, ranked by `ts_rank` then (for
+learnings) `reuse_success_count` then recency. The expression gin indexes
+(`facts_claim_fts_idx` / `learnings_claim_fts_idx`) are **hand-authored SQL** in migration 0006
+(like the RLS policies — drizzle-kit churns expression gin indexes; `drizzle-kit generate`
+confirms no diff), and a tiny `_fts.ts` centralizes the `'english'` regconfig so the index and
+query expressions can't drift (or the planner silently stops using the index). Queries run
+**inside `withScope`** (RLS) with an **explicit `project_id` filter** (RLS permits all the
+agent's projects; the intent targets one) — so a query in A can never see B. `learning.query`
+takes an optional `applies_to` tag filter via drizzle's `arrayOverlaps` (the raw
+`&& $1::text[]` form mis-binds the JS array). Responses are mapped to snake_case and never
+include `embedding`.
+
+Gate green: typecheck clean; **53 tests** (11 new across fact.query/learning.query: keyword
+relevance returns the match not the others, descending `score`, `applies_to` narrowing, `limit`,
+missing-query → 400, and **project-scope isolation** — A's query never returns B's matching row
+while still returning A's own, which doubles as the GUC-is-set proof). `testing/phase4.sh`
+proves keyword search over HTTP (match returned, irrelevant query excluded); `smoke_all` now
+chains 0–4. That's the **Day-1 backend query layer** done.
+
+**Code-review pass** (Sonnet, medium) — nothing alarming; fixed two real findings and one
+cheap nit. (1) **whitespace-only query bypass**: `z.string().min(1)` admitted `"   "`, and
+`plainto_tsquery('english','   ')` yields an *empty* tsquery — which `@@` treats as matching
+every row, so the query would silently dump the whole project instead of keyword-matching.
+Fixed with `z.string().trim().min(1)` in both query schemas (`.trim()` runs before the length
+check), plus a regression test in each (`"   "` → 400). (2) **dead RLS catch on a SELECT**:
+both query handlers wrapped the read in `try/catch isRlsViolation → 403`, but a SELECT under
+RLS just returns 0 rows — it never raises 42501 (only a write `WITH CHECK` or a revoked GRANT
+does), so the catch was dead code that would have masked a real infra failure as a benign 403.
+Removed it from both, with a comment on why SELECTs don't need it. (3) tightened
+`learning.query`'s `applies_to` to `.min(1)` so an empty array can't slip through as a no-op
+filter. Re-verified: typecheck clean, **55 tests** green, `smoke_all` 0–4 green.

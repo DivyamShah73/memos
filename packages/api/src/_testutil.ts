@@ -99,6 +99,35 @@ export async function seedArtifact(projectId: string, bdId: string): Promise<str
   return row.id;
 }
 
+/** Insert a fact row via the owner client (no gate; for query tests). */
+export async function seedFact(
+  projectId: string,
+  bdId: string,
+  claim: string,
+  confidence = "low",
+): Promise<string> {
+  const [row] = await ownerDb
+    .insert(facts)
+    .values({ projectId, bdId, claim, confidence })
+    .returning({ id: facts.id });
+  return row.id;
+}
+
+/** Insert a learning row via the owner client (no gate; for query tests). */
+export async function seedLearning(
+  projectId: string,
+  bdId: string,
+  claim: string,
+  appliesTo: string[],
+  confidence = "low",
+): Promise<string> {
+  const [row] = await ownerDb
+    .insert(learnings)
+    .values({ projectId, bdId, claim, appliesTo, confidence })
+    .returning({ id: learnings.id });
+  return row.id;
+}
+
 /** Mint a single-use code for the given scopes, enroll, and return the raw token. */
 export async function enrollAgent(scopes: string[], displayName: string): Promise<string> {
   const code = `enr_code_vitest_${randomBytes(6).toString("hex")}`;
