@@ -12,6 +12,7 @@ import type { CheckinInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
+import { publishActivity } from "../core/events.js";
 import { checkins, workflowRuns } from "../db/schema.js";
 
 type TxResult = { kind: "error"; message: string } | { kind: "ok"; checkinId: string };
@@ -86,6 +87,16 @@ export async function checkin(ctx: IntentContext, input: CheckinInput): Promise<
     });
 
     if (result.kind === "error") return fail(result.message, ERROR_TYPE.badRequest);
+
+    // Post-commit: surface the state change on the live activity feed (Phase 7).
+    publishActivity({
+      type: "checkin",
+      projectId: project_id,
+      agentId: agent.id,
+      summary: current_task ? `${status} — ${current_task}` : status,
+      ts: new Date().toISOString(),
+      bdId: bd_id,
+    });
     return ok({
       checkin_id: result.checkinId,
       accepted_facts: 0,

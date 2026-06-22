@@ -7,6 +7,7 @@ import type { LearningRecordInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
+import { publishActivity } from "../core/events.js";
 import { assertEvidence, assertRunWritable } from "./_evidence.js";
 import { learnings as learningsTable } from "../db/schema.js";
 
@@ -57,6 +58,19 @@ export async function learningRecord(
     });
 
     if (result.kind === "error") return fail(result.message, ERROR_TYPE.badRequest);
+
+    // Post-commit: surface each learning on the live activity feed (Phase 7).
+    const ts = new Date().toISOString();
+    for (const l of learnings) {
+      publishActivity({
+        type: "learning",
+        projectId: project_id,
+        agentId: agent.id,
+        summary: l.claim,
+        ts,
+        bdId: bd_id,
+      });
+    }
     return ok({ learning_ids: result.ids });
   } catch (err) {
     if (isRlsViolation(err)) {

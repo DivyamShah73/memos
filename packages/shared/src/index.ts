@@ -21,3 +21,5 @@ export * from "./schemas/brief.fetch.js";
 export * from "./schemas/brief.ack.js";
 export * from "./schemas/question.ask.js";
 export * from "./schemas/question.answer.js";
+export * from "./schemas/activity.recent.js";
+export * from "./schemas/agent.me.js";
