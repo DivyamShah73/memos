@@ -6,6 +6,8 @@
 import type { ZodTypeAny } from "zod";
 import {
   artifactUploadInputSchema,
+  briefAckInputSchema,
+  briefFetchInputSchema,
   checkinInputSchema,
   enrollInputSchema,
   factQueryInputSchema,
@@ -17,6 +19,8 @@ import {
   objectivePublishInputSchema,
   objectiveQueryInputSchema,
   objectiveUpdateInputSchema,
+  questionAnswerInputSchema,
+  questionAskInputSchema,
   workflowCreateInputSchema,
 } from "@memos/shared";
 import type { IntentContext } from "./context.js";
@@ -34,6 +38,10 @@ import { objectiveQuery } from "../intents/objective.query.js";
 import { objectiveUpdate } from "../intents/objective.update.js";
 import { milestoneAchieve } from "../intents/milestone.achieve.js";
 import { keyResultUpdate } from "../intents/key_result.update.js";
+import { briefFetch } from "../intents/brief.fetch.js";
+import { briefAck } from "../intents/brief.ack.js";
+import { questionAsk } from "../intents/question.ask.js";
+import { questionAnswer } from "../intents/question.answer.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -146,6 +154,38 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: keyResultUpdateInputSchema,
       handler: keyResultUpdate as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "brief.fetch",
+    {
+      schema: briefFetchInputSchema,
+      handler: briefFetch as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "brief.ack",
+    {
+      schema: briefAckInputSchema,
+      handler: briefAck as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "question.ask",
+    {
+      schema: questionAskInputSchema,
+      handler: questionAsk as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "question.answer",
+    {
+      schema: questionAnswerInputSchema,
+      handler: questionAnswer as IntentDef["handler"],
       requiresAuth: true,
     },
   ],
