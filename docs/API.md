@@ -139,5 +139,46 @@ curl -s -X POST $API/v1/intent/learning.query -H "authorization: Bearer $TOK" \
 # → { "ok": true, "data": { "learnings": [ { "claim": "vllm gpu deployment tuning…", "score": 0.06, … } ] } }
 ```
 
-*More intents are added per phase (objective.*, milestone.achieve, brief.*, question.*, … ) — see
-`docs/PHASED_BUILD_PLAN.md`.*
+### `objective.publish` — create an objective / sub-OKR (with optional inline milestones)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id": string, "title": string, "description"?: string, "target_completion"?: iso8601, "parent_id"?: uuid, "weight"?: number, "milestones"?: [{ "title": string, "description"?: string, "position"?: int, "metric_target"?: number, "metric_current"?: number, "metric_unit"?: string, "metric_direction"?: "up"|"down" }] }`
+- **Returns:** `{ "objective_id": uuid, "milestone_ids": uuid[] }`
+- **Notes:** threaded onto the run (`bd_id`, must be open). A milestone with a `metric_target` is a **key result**; without, a plain milestone. For a sub-OKR, `parent_id` must be a non-abandoned objective in the same project (else `ok:false`). All-or-nothing.
+
+### `objective.query` — read the OKR tree with rolled-up progress
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "objective_id"?: uuid, "include_children"?: boolean (default true) }`
+- **Returns:** `{ "objectives": [{ "id", "parent_id", "title", "status", "weight", "progress", "milestones": [{ "id", "title", "status", "metric_target", "metric_current", "metric_direction", "progress" }], "children": [ … ] }] }`
+- **Notes:** `progress` ∈ `[0,1]` per ADR-005 (weighted child rollup, ratio-clamp metrics, achieved=1, abandoned children excluded). With `objective_id`, returns that subtree; without, all roots. Project-scoped (RLS + explicit filter).
+
+### `objective.update` — patch a field or transition status
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "objective_id": uuid, "title"?, "description"?, "target_completion"?, "weight"?, "status"?: "active"|"achieved"|"abandoned"|"superseded" }` (≥1 mutable field)
+- **Returns:** `{ "objective_id": uuid, "status": string }`
+- **Notes:** abandoning here is what later blocks binding — `workflow.create` rejects an abandoned `target_objective_id`.
+
+### `milestone.achieve` — mark a milestone/KR achieved (evidence-gated)
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "bd_id": string, "milestone_id": uuid, "claim": string, "confidence": "low"|"medium"|"high", "evidence_artifact_id"?: uuid }`
+- **Returns:** `{ "milestone_id": uuid, "status": "achieved", "objective_id": uuid, "objective_progress": number }`
+- **Notes:** **evidence gate** — `confidence ≥ medium` requires an `evidence_artifact_id` in the same project + run (400 if missing; `ok:false` if the cite isn't in this run — covers cross-tenant). Stores an achievement snapshot; achieving an already-achieved milestone → `ok:false`.
+
+### `key_result.update` — move a KR's metric, read back progress
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "milestone_id": uuid, "metric_current": number, "bd_id"?: string }`
+- **Returns:** `{ "milestone_id", "metric_current", "metric_target", "metric_direction", "progress", "objective_id", "objective_progress" }`
+- **Notes:** target must have a `metric_target` (else `ok:false` — not a KR). Does **not** auto-achieve at 100% (achievement is the explicit, evidence-gated `milestone.achieve`).
+
+```bash
+# publish an OKR with one key result, move it to 50%, then achieve it
+OBJ=$(curl -s -X POST $API/v1/intent/objective.publish -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
+  -d "{\"project_id\":\"project.demo\",\"bd_id\":\"$BD\",\"title\":\"Cut p99 latency\",\"milestones\":[{\"title\":\"p99 ≤ 200ms\",\"metric_target\":200,\"metric_current\":400,\"metric_direction\":\"down\"}]}")
+# → { "ok": true, "data": { "objective_id": "…", "milestone_ids": ["…"] } }
+curl -s -X POST $API/v1/intent/key_result.update -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
+  -d "{\"project_id\":\"project.demo\",\"milestone_id\":\"$MS\",\"metric_current\":300}"
+# → { "ok": true, "data": { "progress": 0.66…, "objective_progress": 0.66… } }
+curl -s -X POST $API/v1/intent/objective.query -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
+  -d "{\"project_id\":\"project.demo\",\"objective_id\":\"$OBJ_ID\"}"
+```
+
+*More intents are added per phase (brief.*, question.*, … ) — see `docs/PHASED_BUILD_PLAN.md`.*

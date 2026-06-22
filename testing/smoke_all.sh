@@ -14,6 +14,6 @@ bash testing/phase1.sh   # gateway core + auth + enroll
 bash testing/phase2.sh   # workflow + checkin (provenance spine)
 bash testing/phase3.sh   # artifacts + evidence-gated writes (THE core invariant)
 bash testing/phase4.sh   # query (FTS over facts/learnings)
-# bash testing/phase5.sh   # okrs                 (added in Phase 5)
+bash testing/phase5.sh   # okrs (goals + rollups)
 # bash testing/phase6.sh   # briefs + critic      (added in Phase 6)
 echo "=== ALL PHASES GREEN ==="

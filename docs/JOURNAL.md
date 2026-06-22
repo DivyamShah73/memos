@@ -222,3 +222,49 @@ does), so the catch was dead code that would have masked a real infra failure as
 Removed it from both, with a comment on why SELECTs don't need it. (3) tightened
 `learning.query`'s `applies_to` to `.min(1)` so an empty array can't slip through as a no-op
 filter. Re-verified: typecheck clean, **55 tests** green, `smoke_all` 0–4 green.
+
+---
+
+## 2026-06-22 — Phase 5: OKRs (goals + rollups)
+
+The goal layer the operator steers the fleet with. Five intents — `objective.publish` /
+`objective.query` / `objective.update`, `milestone.achieve`, `key_result.update` — over the
+`objectives` + `milestones` tables that Phase 0 already created (one table, two roles: a
+`milestones` row with a `metric_target` is a **key result**, without it a plain milestone). So
+**no migration** — the RLS policies + `memos_app` grants for both tables were already in
+0002/0004; this phase is schemas + handlers + rollup math + tests, all on the established
+write/query patterns (`withScope` + explicit `project_id` filter, `assertRunWritable` /
+`assertEvidence` reused from `_evidence.ts`, the `42501`-backstop catch on writes, none on the
+read-only `objective.query`).
+
+The real work is the **rollup math** (`intents/_okr.ts`, pinned in **ADR-005**): progress is one
+float in `[0,1]`. A KR is `current/target` (`up`) or `target/current` (`down`, lower-is-better),
+clamped, div-by-zero guarded; an explicitly achieved item is `1` regardless of metric; an
+objective with sub-OKRs is the **weight-normalized mean of its children**, with abandoned/
+superseded children **excluded** from both numerator and denominator (descoping a branch
+mustn't drag the parent down); a leaf objective is the equal mean of its milestones. Postgres
+`numeric` columns come back as **strings** from postgres-js, so every value is `Number()`'d in
+that one file — the single place math happens, so handlers and tests can't drift. The achieve /
+kr-update handlers recompute the parent rollup via a shared `recomputeObjectiveProgress` (the one
+DB-touching helper) after their write. Two product calls (operator-confirmed): milestone
+achievement **is evidence-gated** like fact/learning (medium/high ⇒ `evidence_artifact_id` in the
+same project+run); `key_result.update` **never auto-achieves** at 100% — hitting a number isn't
+proof, achievement is the explicit gated act.
+
+Two correctness details worth noting: `objective.publish` validates a sub-OKR's `parent_id`
+in-scope (RLS hides another tenant's → "not found") and rejects an abandoned/superseded parent,
+mirroring the workflow.create binding rule; and `_testutil` `cleanupAndClose` had a latent FK
+trap (it never deleted `milestones`, and a bulk objectives delete can violate the self-FK
+`parent_id`/`supersedes_id` mid-statement) — now it deletes milestones first and NULLs the
+self-FKs before the objectives delete.
+
+Gate green: `pnpm typecheck` clean; **79 tests** (24 new across the 5 OKR suites: weighted
+rollup excluding abandoned children, up/down metric progress with exact expected values, the
+evidence gate on `milestone.achieve` incl. a cross-tenant cite → `ok:false`, already-achieved →
+`ok:false`, and **abandon-then-can't-bind** which re-verifies the Phase-2 invariant cross-phase).
+`testing/phase5.sh` proves the loop over HTTP (publish → KR to 45/90 → query rollup 0.25 →
+achieve → medium-without-evidence rejected). `testing/demo_day1.sh` is the **Day-1 capstone**:
+one script running the entire agent loop end-to-end (enroll → workflow → checkin → artifact →
+evidence-gated fact + learning → query → publish OKR → kr.update → achieve → checkin complete)
+and asserting an evidence-less medium write is rejected. `smoke_all` now chains 0–5. **Day 1 is
+done** — the full backend agent loop works end-to-end with the core invariant holding.
