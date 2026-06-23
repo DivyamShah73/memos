@@ -30,6 +30,7 @@ export default async function LoginPage({
     jar.set(SESSION_COOKIE, signSession(json.data!.api_token.raw), {
       httpOnly: true,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production", // HTTPS-only off localhost (review M1)
       path: "/",
       maxAge: 60 * 60 * 8,
     });
