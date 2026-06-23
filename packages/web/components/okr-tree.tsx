@@ -1,26 +1,17 @@
 import { cn } from "@/lib/utils";
 import type { Milestone, ObjectiveNode } from "@/lib/types";
+import { ProgressBar } from "@/components/progress-bar";
 
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
 
-function barColor(p: number): string {
-  if (p >= 0.8) return "bg-accent-2";
-  if (p >= 0.4) return "bg-accent";
-  return "bg-warn";
-}
-
-function ProgressBar({ progress }: { progress: number }) {
-  const clamped = Math.max(0, Math.min(1, progress));
+/** Bar + right-aligned percentage label (the OKR/milestone variant). */
+function LabeledBar({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(1, progress)); // keep the label and the bar in agreement
   return (
     <div className="flex items-center gap-3">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-border">
-        <div
-          className={cn("h-full rounded-full transition-all", barColor(clamped))}
-          style={{ width: pct(clamped) }}
-        />
-      </div>
+      <ProgressBar value={clamped} className="flex-1" />
       <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-muted">
         {pct(clamped)}
       </span>
@@ -56,7 +47,7 @@ function MilestoneRow({ m }: { m: Milestone }) {
       <span className="min-w-0 flex-1 truncate text-fg/90">{m.title}</span>
       {metric ? <span className="font-mono text-xs text-muted">{metric}</span> : null}
       <span className="w-24">
-        <ProgressBar progress={m.progress} />
+        <LabeledBar progress={m.progress} />
       </span>
     </div>
   );
@@ -82,7 +73,7 @@ function ObjectiveCard({ node, depth = 0 }: { node: ObjectiveNode; depth?: numbe
           </div>
         </div>
         <div className="mt-3">
-          <ProgressBar progress={node.progress} />
+          <LabeledBar progress={node.progress} />
         </div>
         {node.milestones.length > 0 ? (
           <div className="mt-3 border-t border-border/60 pt-2">

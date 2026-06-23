@@ -1,10 +1,10 @@
 import { revalidatePath } from "next/cache";
-import { callIntent } from "@/lib/memos";
+import { callIntent, getProjectId } from "@/lib/memos";
 import { relativeTime } from "@/lib/utils";
 import type { BriefRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
+const PROJECT = getProjectId();
 
 async function createBrief(formData: FormData) {
   "use server";
@@ -13,8 +13,13 @@ async function createBrief(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   if (!target_id || !title || !body) return;
-  await callIntent("brief.create", { target_kind, target_id, title, body });
-  revalidatePath("/briefs");
+  try {
+    await callIntent("brief.create", { target_kind, target_id, title, body });
+    revalidatePath("/briefs");
+  } catch {
+    // A business-rule rejection (e.g. out-of-scope target) shouldn't crash the page; the list
+    // simply won't gain the brief. (Inline form-level error feedback is a future enhancement.)
+  }
 }
 
 export default async function BriefsPage() {

@@ -370,3 +370,33 @@ Gate green: `pnpm typecheck` clean; `pnpm --filter @memos/api test` → 102 + th
 `testing/phase8.sh` proves the chain + brief round-trip + leaderboard over HTTP; **Playwright**
 clicks the high-reuse learning and asserts its objective + agent nodes render, and authors a brief
 that appears in the list. `smoke_all` now chains 0–8. Day 2's dashboard is feature-complete.
+
+---
+
+## 2026-06-23 — Phase 9: SDK, rich seed, full e2e, README/polish (project complete)
+
+The finale — turning a working system into one a reviewer (and an agent) can pick up in minutes.
+**`@memos/agent`** is a full typed client: `MemosClient.enroll()` + a method per agent-facing
+intent over the uniform envelope, throwing a typed `MemosError` on `ok:false` so callers use
+try/catch. **`AGENTS.md`** is the agent manifest (the loop + the two gates + a quickstart). The
+**rich demo seed** makes the dashboard look alive — two top-level OKRs with weighted sub-OKRs/KRs,
+standing briefs (team/project/agent), a dozen+ facts/learnings/checkins across four agents with
+varied trust, and two evidence-backed learnings for provenance depth.
+
+The headline deliverable is the **SDK-driven end-to-end** (`testing/phase9.sh` →
+`sdk/memos-agent/e2e/full-loop.ts`): the whole lifecycle over HTTP (enroll → briefs → workflow →
+checkin → artifact → evidence-gated fact + learning → query → publish OKR → move KR → achieve →
+close) plus the three core-invariant proofs — the evidence gate **rejects** an unbacked medium
+write, a second agent gets **403** on another project and sees none of its facts (isolation), and
+`"throughput ≤ 200ms — cost 🎯 hit"` **round-trips byte-intact** (the UTF-8 promise). The
+**README** was rewritten as the showpiece: a Mermaid architecture diagram, four auto-captured
+dashboard screenshots (a gated Playwright spec writes them to `docs/screenshots/`), the invariants
+table, the agent loop, SDK quickstart, and the test-gated build story; `docs/DEMO_SCRIPT.md` is the
+2-minute Loom shot-list (the recording itself is the operator's to make). Also folded in the three
+Phase-8 review nits: a shared `ProgressBar`, a `getProjectId()` helper, and a try/catch around the
+brief-authoring server action. No new ADR — Phase 9 adds a client, a manifest, docs, and seed data,
+introducing no new architectural decision.
+
+Gate green: `pnpm typecheck` (now incl. the SDK) clean; **111** API tests; web build clean;
+`testing/phase9.sh` and `smoke_all.sh` **0–9** all green; dashboard populated and screenshot-ready.
+**MemOS is done** — the full spec, built spec-first across ten test-gated phases, public on GitHub.

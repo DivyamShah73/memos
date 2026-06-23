@@ -1,11 +1,11 @@
-import { callIntent } from "@/lib/memos";
+import { callIntent, getProjectId } from "@/lib/memos";
 import type { ActivityItem, ObjectiveNode } from "@/lib/types";
 import { OkrTree } from "@/components/okr-tree";
 import { ActivityFeed } from "@/components/activity-feed";
 
 export const dynamic = "force-dynamic";
 
-const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
+const PROJECT = getProjectId();
 
 export default async function DashboardPage() {
   // Degrade gracefully: a gateway business-rule failure (envelope ok:false → thrown) should render

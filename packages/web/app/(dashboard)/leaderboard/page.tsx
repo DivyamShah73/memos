@@ -1,19 +1,12 @@
-import { callIntent } from "@/lib/memos";
-import { cn } from "@/lib/utils";
+import { callIntent, getProjectId } from "@/lib/memos";
 import type { LeaderboardRow } from "@/lib/types";
+import { ProgressBar } from "@/components/progress-bar";
 
 export const dynamic = "force-dynamic";
-const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
-
-function trustColor(t: number): string {
-  if (t >= 0.8) return "bg-accent-2";
-  if (t >= 0.5) return "bg-accent";
-  return "bg-warn";
-}
 
 export default async function LeaderboardPage() {
   const { leaderboard } = await callIntent<{ leaderboard: LeaderboardRow[] }>("trust.leaderboard", {
-    project_id: PROJECT,
+    project_id: getProjectId(),
   }).catch(() => ({ leaderboard: [] as LeaderboardRow[] }));
 
   return (
@@ -30,12 +23,7 @@ export default async function LeaderboardPage() {
                   <span className="truncate font-mono text-[11px] text-muted">{a.agent_id}</span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-3">
-                  <div className="h-1.5 w-40 overflow-hidden rounded-full bg-border">
-                    <div
-                      className={cn("h-full rounded-full", trustColor(a.trust_score))}
-                      style={{ width: `${Math.round(a.trust_score * 100)}%` }}
-                    />
-                  </div>
+                  <ProgressBar value={a.trust_score} className="w-40" />
                   <span className="font-mono text-xs text-muted">{a.trust_score.toFixed(2)}</span>
                 </div>
               </div>
