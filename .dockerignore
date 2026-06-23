@@ -1,0 +1,32 @@
+# Build-context excludes for the API image (infra/deploy/Dockerfile). Docker honors .dockerignore
+# from the build-context root only (the context is the repo root — render.yaml sets dockerContext: .),
+# which is why this lives here and not next to the Dockerfile.
+#
+# Keep: every package.json, packages/*/src, sdk, and infra/migrations (the entrypoint migrates+seeds
+# from the image). Drop: installed deps, VCS, the web app's build output, tests, docs, local secrets.
+
+**/node_modules
+.git
+.github
+.claude
+
+# tests + e2e never run inside the gateway image
+**/*.test.ts
+**/*.spec.ts
+sdk/memos-agent/e2e
+
+# the dashboard is built+served by Vercel, not this image (manifest is still copied for the
+# workspace graph; its source/build output is not needed here)
+packages/web/.next
+packages/web/out
+packages/web/test-results
+packages/web/playwright-report
+
+# docs / local-only / scratch
+docs
+testing
+.env
+.env.local
+.env.*.local
+.env.production
+*.log
