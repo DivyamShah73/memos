@@ -84,8 +84,8 @@ async function run(): Promise<void> {
     .insert(objectives)
     .values([
       { id: O(1), projectId: "project.demo", bdId: BD, agentId: "agent.operator", title: "Cut inference cost 30%", status: "active" },
-      { id: O(2), projectId: "project.demo", parentId: O(1), weight: "2", bdId: BD, title: "Ship vLLM continuous batching", status: "active" },
-      { id: O(3), projectId: "project.demo", parentId: O(1), weight: "1", bdId: BD, title: "Cache embeddings", status: "active" },
+      { id: O(2), projectId: "project.demo", parentId: O(1), weight: "2", bdId: BD, agentId: "agent.operator", title: "Ship vLLM continuous batching", status: "active" },
+      { id: O(3), projectId: "project.demo", parentId: O(1), weight: "1", bdId: BD, agentId: "agent.scout", title: "Cache embeddings", status: "active" },
       // A second top-level objective for a fuller tree.
       { id: O(4), projectId: "project.demo", bdId: BD, agentId: "agent.operator", title: "Reach 95% eval coverage", status: "active" },
     ])

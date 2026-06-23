@@ -8,11 +8,12 @@ function pct(p: number): string {
 
 /** Bar + right-aligned percentage label (the OKR/milestone variant). */
 function LabeledBar({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(1, progress)); // keep the label and the bar in agreement
   return (
     <div className="flex items-center gap-3">
-      <ProgressBar value={progress} className="flex-1" />
+      <ProgressBar value={clamped} className="flex-1" />
       <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-muted">
-        {pct(progress)}
+        {pct(clamped)}
       </span>
     </div>
   );

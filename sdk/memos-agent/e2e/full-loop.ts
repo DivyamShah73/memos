@@ -81,12 +81,16 @@ async function main(): Promise<void> {
 
   // --- Invariant proofs ---
 
-  // (a) Evidence gate: a medium fact with no evidence must be rejected.
+  // (a) Evidence gate: a medium fact with no evidence must be rejected. Use a FRESH OPEN run so
+  // we're testing the gate (validation_error) — not the closed-run guard on the loop's bd_id.
+  const gateRun = await a.workflowCreate({ project_id: PROJ_A, workflow_class: "investigation", title: "gate run" });
   try {
-    await a.factRecord({ project_id: PROJ_A, bd_id, facts: [{ claim: "unbacked", confidence: "medium" }] });
+    await a.factRecord({ project_id: PROJ_A, bd_id: gateRun.bd_id, facts: [{ claim: "unbacked", confidence: "medium" }] });
     fail("evidence gate did NOT reject an unbacked medium write");
   } catch (e) {
-    e instanceof MemosError ? pass("evidence gate rejected unbacked medium write") : fail(`unexpected error: ${e}`);
+    e instanceof MemosError && e.errorType === "validation_error"
+      ? pass("evidence gate rejected unbacked medium write")
+      : fail(`evidence gate: wrong rejection (${e instanceof MemosError ? `${e.errorType}: ${e.message}` : e})`);
   }
 
   // (b) Tenant isolation: agent B (project.other) can't read A's project, and sees none of A's data.
@@ -97,8 +101,16 @@ async function main(): Promise<void> {
   } catch (e) {
     e instanceof MemosError && e.errorType === "forbidden" ? pass("tenant isolation: B is 403 on A's project") : fail(`unexpected: ${e}`);
   }
-  const bOwn = await bAgent.factQuery({ project_id: PROJ_B, query: "latency" });
-  bOwn.facts.every((f) => !/180ms/.test(String(f.claim))) ? pass("tenant isolation: B sees none of A's facts") : fail("isolation leak");
+  // B writes a distinctive fact in its OWN project, then queries: it must see its fact and never A's.
+  // (Non-vacuous: asserts B's query returns its scoped data, not an empty set that passes trivially.)
+  const bRun = await bAgent.workflowCreate({ project_id: PROJ_B, workflow_class: "investigation", title: "B run" });
+  await bAgent.factRecord({ project_id: PROJ_B, bd_id: bRun.bd_id, facts: [{ claim: "tenant-B-only marker fact", confidence: "low" }] });
+  const bOwn = await bAgent.factQuery({ project_id: PROJ_B, query: "marker" });
+  const seesOwn = bOwn.facts.some((f) => /tenant-B-only/.test(String(f.claim)));
+  const seesA = bOwn.facts.some((f) => /180ms/.test(String(f.claim)));
+  seesOwn && !seesA
+    ? pass("tenant isolation: B sees its own project's facts, none of A's")
+    : fail(`tenant isolation (seesOwn=${seesOwn} seesA=${seesA})`);
 
   // (c) UTF-8 round-trip. (The first run is closed, so open a fresh one for this write.)
   const utf = "throughput ≤ 200ms — cost 🎯 hit";

@@ -65,13 +65,15 @@ async function rawCall<T>(
     headers,
     body: JSON.stringify(body),
   });
-  const json = (await res.json()) as {
-    ok: boolean;
-    data?: T;
-    error?: string;
-    error_type?: string;
-    detail?: unknown;
-  };
+  const text = await res.text();
+  let json: { ok: boolean; data?: T; error?: string; error_type?: string; detail?: unknown };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // A non-JSON response (proxy 5xx, dead process, empty body) — surface it as a MemosError, not
+    // a raw SyntaxError, so callers' try/catch keeps working uniformly.
+    throw new MemosError(`non-JSON response from ${intent}`, "platform_error", text.slice(0, 200), res.status);
+  }
   if (!json.ok) {
     throw new MemosError(
       json.error ?? `intent ${intent} failed`,
