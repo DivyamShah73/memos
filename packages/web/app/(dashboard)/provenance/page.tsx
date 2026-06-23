@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { callIntent } from "@/lib/memos";
+import { callIntent, getProjectId } from "@/lib/memos";
 import { cn } from "@/lib/utils";
 import type { LearningListItem, ProvEdge, ProvNode } from "@/lib/types";
 import { ProvenanceGraph } from "@/components/provenance-graph";
 
 export const dynamic = "force-dynamic";
-const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
+const PROJECT = getProjectId();
 
 export default async function ProvenancePage({
   searchParams,

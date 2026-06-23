@@ -7,6 +7,11 @@
 export const API_URL = process.env.MEMOS_API_URL ?? "http://127.0.0.1:8787";
 export const OPERATOR_TOKEN = process.env.MEMOS_OPERATOR_TOKEN ?? "";
 
+/** The project the dashboard is scoped to (one source of truth for all pages). */
+export function getProjectId(): string {
+  return process.env.MEMOS_PROJECT_ID ?? "project.demo";
+}
+
 export async function callIntent<T = unknown>(
   name: string,
   body: Record<string, unknown> = {},

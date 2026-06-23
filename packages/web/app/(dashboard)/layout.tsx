@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifySession, SESSION_COOKIE } from "@/lib/session";
-import { callIntent } from "@/lib/memos";
+import { callIntent, getProjectId } from "@/lib/memos";
 import type { AgentContext } from "@/lib/types";
 import { SidebarNav } from "@/components/sidebar-nav";
 
@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   } catch {
     ctx = null;
   }
-  const project = process.env.MEMOS_PROJECT_ID ?? ctx?.scopes?.[0] ?? "project.demo";
+  const project = getProjectId();
 
   return (
     <div className="flex min-h-screen">
