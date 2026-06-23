@@ -237,6 +237,30 @@ curl -N -H "authorization: Bearer $TOK" "$API/v1/stream/activity?project_id=proj
 # data: {"type":"fact","summary":"p99 dropped…","agentId":"agent.x","ts":"…"}
 ```
 
+### `provenance.trace` — lineage graph of a learning
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "learning_id": uuid }`
+- **Returns:** `{ "nodes": [{ "id", "type": "learning"|"artifact"|"run"|"objective"|"agent", "label" }], "edges": [{ "from", "to", "label" }] }`
+- **Notes:** walks the `bd_id` spine (invariant #4): learning → evidence artifact → workflow run → objective → authoring agent. In-scope (RLS); a foreign/out-of-project learning → `ok:false`.
+
+### `learning.list` — browse a project's learnings by reuse
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string, "limit"?: number (default 30, max 50) }`
+- **Returns:** `{ "learnings": [{ "id", "claim", "confidence", "applies_to", "reuse_success_count", "has_evidence" }] }`
+- **Notes:** ordered by `reuse_success_count` desc then recency (the provenance picker). No keyword — that's `learning.query`.
+
+### `brief.create` — author a standing brief
+- **Auth:** bearer (the author).
+- **Input:** `{ "target_kind": "org"|"team"|"project"|"agent", "target_id": string, "title": string, "body": string, "supersedes_id"?: uuid }`
+- **Returns:** `{ "brief_id": uuid }`
+- **Notes:** authoring is open — a brief is outbound; read-isolation (who can *see* it) is the boundary (ADR-006). The author is the calling agent. Verify delivery via the target's `brief.fetch`.
+
+### `trust.leaderboard` — agents ranked by trust
+- **Auth:** bearer; agent scoped to `project_id`.
+- **Input:** `{ "project_id": string }`
+- **Returns:** `{ "leaderboard": [{ "agent_id", "display_name", "trust_score", "learnings_authored" }] }`
+- **Notes:** agents on the caller's team, sorted by `trust_score` desc; `learnings_authored` counted in this project.
+
 ### Governance workers (not intents)
 Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/governance`):
 - `pnpm --filter @memos/workers run critic:evidence` — files a brief at any agent with a medium/high fact or learning that lacks evidence (the evidence-gate compliance critic).
