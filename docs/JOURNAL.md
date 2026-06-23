@@ -515,3 +515,27 @@ three role-views are demoable; Playwright login helpers updated to email/passwor
 Gate green: `pnpm typecheck` (4 workspaces) clean; **130** API tests (5 new — login + user-principal
 role gating through dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase13.sh`
 proves per-user login + scoping over HTTP; **`smoke_all.sh` 0–13 all green**.
+
+---
+
+## 2026-06-24 — Phase 14: self-serve admin & lifecycle (autonomous, v2 complete)
+
+Onboarding stops needing SQL. **ADR-012**: five intents — public **`org.signup`** (creates an org +
+starter team/project + first CEO, returns a session token), **`enrollment.create`** (mint an agent
+code for a project in scope), **`user.invite`**, **`agent.revoke`**, **`member.offboard`** (disable
+login + null the session). A new **`ADMIN_INTENTS`** tier in the authz matrix: org administration is
+allowed for **manager OR ceo** and is *not* subject to the CEO read-only rule — the CEO runs the org
+even though it can't author project content (otherwise a fresh org's only member could do nothing).
+Every admin handler verifies the target belongs to the actor's org (no cross-org administration) and
+writes an **`audit_log`** entry (migration 0011, org-RLS'd; written via the owner connection so the
+public signup — which has no org GUC — still logs).
+
+Two snags, both caught + fixed: `phase14.sh` first ran against a **stale gateway** left on :8787 from
+manual testing (so the new intents 404'd) — killed it + re-ran fresh; and the script used **`UID`** as
+a variable, which is a bash readonly builtin — renamed to `IUSERID`.
+
+Gate green: `pnpm typecheck` (4 workspaces) clean; **134** API tests (4 new — the full signup → mint →
+enroll → invite → offboard → revoke loop + audit assertions); `drizzle-kit generate` no-diff; web
+build clean; `testing/phase14.sh` proves the zero-operator loop over HTTP; **`smoke_all.sh` 0–14 all
+green**. **v2 is functionally complete** — a multi-org, role-based, self-serve agentic-supervision
+product, all on free-tier, built across Phases 11–14 on branches for review.

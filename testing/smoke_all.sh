@@ -23,4 +23,5 @@ bash testing/phase10.sh  # deployment artifacts: prod image builds, self-provisi
 bash testing/phase11.sh  # multi-org foundation: people org-isolated at the DB
 bash testing/phase12.sh  # roles & authorization: member/manager/ceo guard
 bash testing/phase13.sh  # per-user login & user-principal scoping
+bash testing/phase14.sh  # self-serve admin & lifecycle (signup → mint → enroll → invite → offboard)
 echo "=== ALL PHASES GREEN ==="
