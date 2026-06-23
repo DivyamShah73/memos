@@ -285,3 +285,78 @@ This is aggressive but doable *because* the spec is fully designed already. To p
 - A phase that won't go green by its deadline gets **descoped, not rushed past untested.** A half-built phase with a checked box is exactly the "what's broken?" mess you're avoiding.
 
 > **The discipline that makes this work:** the box gets checked when the manual test passed *in front of you*, not when Claude says it's done. Trust the green, verify the green.
+
+---
+
+# PRODUCT v2 — Multi-org supervision platform (Phases 11–15)
+
+> v1 (Phases 0–9) shipped the single-operator agent-memory system; **Phase 10** added free-tier deployment (Neon + Render + Vercel, self-provisioning image, CI). v2 turns MemOS into a **multi-tenant, role-based product** an organization can sign up for to supervise its agent fleet — sellable to many orgs.
+>
+> **Bifurcation principles:** each phase is a *vertical slice* that leaves a coherent, demoable product (never a dangling layer); **risk-first** ordering (the tenancy/isolation foundation first, because everything sits on it); **no retrofit** (multi-org-aware from day one); the **proven core stays green** (`smoke_all` 0–10 must pass at the end of every v2 phase — we extend, never regress); the project-isolation core is **reused, never rewritten** (control-plane reuses the GUC+policy pattern; the CEO role is a *widened scope*, not an RLS bypass).
+>
+> **Roles (all org-bounded):** **CEO** = org-level, *read-only* across all their org's projects (+ audited); **Manager** = per-team admin (manage members, mint agent codes, steer their team's briefs/OKRs); **Member** = project-level (their agents read/write the shared project pool).
+>
+> **Milestones:** *sellable product* after **Phase 14** (self-serve, zero operator); *production-grade* after **Phase 15**.
+
+## Phase 11 — Multi-org tenancy foundation (the bedrock)
+**Build:** `users` (humans) + real per-user auth (email/password hashed → signed session, retiring the shared-password gate); `memberships` (user ↔ org/team/project, carries a role); `org_id` threaded consistently; agents *owned* within an org; **control-plane RLS** (orgs/teams/projects/agents/users/memberships org-walled via an org-id GUC, reusing the ADR-002/004 pattern); org provisioning (create org + first CEO). Build as a **walking skeleton**: data model → one working login + scoped-read thread → then breadth.
+
+**Automated test:** two orgs seeded; a user in org A authenticates and resolves to org A; **every cross-org read — data *and* control-plane (members/projects/teams) — is denied**; existing agent project-isolation tests still green.
+
+**Manual test (`testing/phase11.sh`):** create two orgs + a user each; prove via API that org A's user cannot see org B's projects/members/learnings, and vice-versa.
+
+**EXIT GATE:**
+- [ ] `users` + `memberships` + `org_id` everywhere; agents owned within an org
+- [ ] per-user auth issues a real session (shared-password gate retired)
+- [ ] multi-org isolation holds at the DB for **both** data plane and control plane (proven by tests)
+- [ ] `smoke_all.sh` (0–10) still green — the agent loop + project isolation never regressed
+
+## Phase 12 — Roles & authorization (CEO / manager / member)
+**Build:** a per-intent **authorization guard** at the gateway choke point (intent → minimum role, returns the existing `403` envelope); **CEO** = read-only scope *resolved to all their org's projects* (reuse RLS, no bypass) + audit of cross-project reads; **manager** = team admin + team steering; **member** = project work. ADR for the CEO isolation exception + the scope-widening approach.
+
+**Automated test:** the full authz matrix — each role's allowed/denied intents; CEO reads across all org projects but every *write* is refused; manager actions scoped to their team; member blocked from admin intents; cross-org still denied.
+
+**Manual test (`testing/phase12.sh`):** act as each role; prove the allow/deny matrix and the CEO read-only-everything behavior.
+
+**EXIT GATE:**
+- [ ] authz matrix enforced centrally + covered by tests
+- [ ] CEO = org-wide read-only (writes denied) and audited
+- [ ] manager/member capabilities correct and scoped
+- [ ] `smoke_all.sh` (0–10 + 11) green
+
+## Phase 13 — Multi-user dashboard (the product's face)
+**Build:** per-person login (retires the single-operator model / reverses ADR-007); org/team/project switcher; the dashboard reads **as the logged-in user's scope+role**; the **CEO aggregate org overview** (cross-project/team rollups + health) vs the manager team view vs the member project view.
+
+**Automated test:** Playwright — three people in three roles each see exactly their scoped surface; nothing out-of-scope renders; the CEO sees the org bird's-eye.
+
+**Manual test (browser):** log in as a CEO, a manager, and a member; confirm each sees only what their role+scope allows.
+
+**EXIT GATE:**
+- [ ] per-user login; dashboard reads as the logged-in user (no shared operator token)
+- [ ] CEO overview vs manager vs member views correct + scoped
+- [ ] Playwright green
+
+## Phase 14 — Self-serve admin & lifecycle (🏁 sellable product)
+**Build:** org **signup**; invites; `enrollment.create` for managers (mint agent codes); member add/remove/**offboard**; token lifecycle (revoke/rotate); **audit log** of admin + steering actions.
+
+**Automated test:** the full self-serve loop end-to-end; offboarding a member instantly revokes their (and their agents') access; audit entries written for each admin action.
+
+**Manual test (`testing/phase14.sh` + browser):** a brand-new org signs up → CEO invites a manager → manager creates a project, invites members, mints an agent code → an agent enrolls and posts → a member queries it. Zero operator intervention.
+
+**EXIT GATE:**
+- [ ] full self-serve onboarding loop works with no manual SQL
+- [ ] offboarding cuts access (user + their agents) immediately
+- [ ] audit log records admin/steering actions
+- [ ] `smoke_all.sh` (0–10 + 11–13) green
+
+## Phase 15 — Production hardening & scale (🏁 production-grade)
+**Build:** paid always-on topology; **Redis-backed shared rate limiter + SSE across instances** (today both are per-instance and break on multi-instance); proper connection pooling; backups/DR; per-org quotas; data export/delete.
+
+**Automated/Manual test:** multi-instance SSE delivery correctness; rate limit shared across instances; concurrency/load sanity; a backup→restore drill.
+
+**EXIT GATE:**
+- [ ] runs correctly on ≥2 instances (SSE + rate limit shared, not per-instance)
+- [ ] per-org quotas enforced; data export/delete works
+- [ ] backup/restore proven; monitoring in place
+
+> **v2 regression:** `testing/smoke_all.sh` extends to chain `phase11`–`phase15`; the v1 chain (0–10) must stay green at every step — multi-org and roles are **additive** to the proven isolation core, never a rewrite of it.
