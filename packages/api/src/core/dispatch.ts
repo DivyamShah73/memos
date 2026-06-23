@@ -99,7 +99,7 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
       const identity = [
         ...new Set([agent.id, agent.teamId, agent.orgId, ...agent.scopes].filter(Boolean)),
       ] as string[];
-      ctx.withScope = makeWithScope(gatewayDb, agent.scopes, identity);
+      ctx.withScope = makeWithScope(gatewayDb, agent.scopes, identity, agent.orgId);
     }
     const body = await entry.handler(ctx, result.data as never);
     return done(body);
