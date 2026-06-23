@@ -1,0 +1,61 @@
+name: ci
+
+# Green-gate on every push/PR: bring up the same docker-compose stack used locally (Postgres+MinIO),
+# migrate, typecheck, run the API suite (RLS + evidence + UTF-8 + real blob round-trips), and build
+# the dashboard. Mirrors `testing/` locally so what's green here is green on a dev box.
+on:
+  push:
+    branches: ["main", "phase-*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # The repo's compose file publishes Postgres on :5432 and MinIO on :9000 — exactly the
+      # addresses in .env.example, so the test process connects with zero extra config.
+      - name: Start infra (Postgres + MinIO)
+        run: docker compose up -d db minio
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # env.ts loads the repo-root .env; the committed example points at the compose services.
+      - name: Configure env
+        run: cp .env.example .env
+
+      - name: Wait for Postgres + MinIO
+        run: |
+          for _ in $(seq 1 30); do
+            docker compose exec -T db pg_isready -U postgres -d memos && break
+            sleep 2
+          done
+          docker compose exec -T db pg_isready -U postgres -d memos || { echo "Postgres not ready" >&2; exit 1; }
+          # MinIO must be up before the artifact tests (real putObject/getObject).
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: API tests
+        run: pnpm --filter @memos/api test
+
+      - name: Build dashboard
+        run: pnpm --filter @memos/web build

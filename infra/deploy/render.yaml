@@ -1,0 +1,35 @@
+# Render Blueprint for the MemOS API gateway (free tier).
+#
+# One-time setup: Render dashboard → New → Blueprint → connect this repo. Render reads this file,
+# creates the service, and prompts for the three `sync: false` secrets below. The image's entrypoint
+# self-migrates + self-seeds on first boot, so the gateway comes up ready against a fresh Neon DB.
+# Full walk-through: docs/DEPLOY.md.
+services:
+  - type: web
+    name: memos-api
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./infra/deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # OWNER connection — used by migrate + seed (DDL: extensions, memos_app role, RLS policies).
+      # Neon: the project's direct connection string with ?sslmode=require. Paste in the dashboard.
+      - key: DATABASE_URL
+        sync: false
+      # Least-privileged APP connection — the gateway runs as memos_app so RLS applies (ADR-002).
+      # Same host as DATABASE_URL but user/password memos_app (auto-created by 0000_prereqs.sql).
+      - key: MEMOS_APP_DATABASE_URL
+        sync: false
+      # Secret the dashboard (Vercel) shares so it can authenticate as the seeded operator agent.
+      # Generate one strong value and paste the SAME string here and in Vercel's MEMOS_OPERATOR_TOKEN.
+      - key: MEMOS_OPERATOR_TOKEN
+        sync: false
+      - key: MEMOS_LOG_LEVEL
+        value: info
+    # PORT is injected by Render and honored by server.ts. Optional blob store (MINIO_*) is only
+    # needed for live artifact.upload — see docs/DEPLOY.md → "Optional: blob store". The entrypoint
+    # seeds the demo data + operator agent on boot by default; add MEMOS_SEED=false here for a
+    # non-demo production instance (you then enroll your own agents).

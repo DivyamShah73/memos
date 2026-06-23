@@ -267,3 +267,9 @@ Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/
 - `pnpm --filter @memos/workers run briefs:escalate` — escalates agent briefs unacked for >24h to the agent's team.
 
 *More intents are added per phase (feedback.submit, choice.log, … ) — see `docs/PHASED_BUILD_PLAN.md`.*
+
+## Deployment
+
+Running this gateway on free hosting (Neon + Render + Vercel) is documented step-by-step in
+[`docs/DEPLOY.md`](./DEPLOY.md). The production image self-migrates and self-seeds on first boot, and
+`server.ts` binds the platform-injected `PORT`. Topology rationale: `docs/decisions/008`.

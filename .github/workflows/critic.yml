@@ -1,0 +1,31 @@
+name: governance-critic
+
+# The evidence-compliance critic is a one-shot script (it scans for medium/high writes whose
+# evidence is missing/dangling and files governance notes, then exits). Run it on a schedule
+# against the production database — no always-on worker process needed.
+#
+# Setup (one repo secret): Settings → Secrets and variables → Actions → New secret
+#   DATABASE_URL = the Neon OWNER connection string (?sslmode=require). The critic runs as owner.
+on:
+  schedule:
+    - cron: "17 */6 * * *" # every 6 hours at :17 (off the top-of-hour spike)
+  workflow_dispatch: {}
+
+jobs:
+  critic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run evidence critic
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm --filter @memos/workers run critic:evidence

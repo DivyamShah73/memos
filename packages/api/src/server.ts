@@ -6,8 +6,12 @@ import "./env.js"; // side effect: load the repo-root .env
 import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 
-const port = Number(process.env.MEMOS_PORT ?? 8787);
+// PaaS hosts (Render, Fly, …) inject the port to bind on as PORT; honor it first so the
+// platform health check can reach us. MEMOS_PORT stays the local-dev override; 8787 is the default.
+const port = Number(process.env.PORT ?? process.env.MEMOS_PORT ?? 8787);
 
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`MemOS gateway listening on http://localhost:${info.port}`);
+// Bind all interfaces (0.0.0.0), not loopback — a PaaS health check / proxy reaches the container
+// on its external IP, never 127.0.0.1.
+serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, (info) => {
+  console.log(`MemOS gateway listening on http://0.0.0.0:${info.port}`);
 });

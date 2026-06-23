@@ -400,3 +400,33 @@ introducing no new architectural decision.
 Gate green: `pnpm typecheck` (now incl. the SDK) clean; **111** API tests; web build clean;
 `testing/phase9.sh` and `smoke_all.sh` **0–9** all green; dashboard populated and screenshot-ready.
 **MemOS is done** — the full spec, built spec-first across ten test-gated phases, public on GitHub.
+
+---
+
+## 2026-06-23 — Phase 10: deployment (free-tier, hands-off)
+
+Making the finished system *reachable*. A re-read of the runtime surface settled the shape: there's
+**no build step** (everything runs under `tsx`), the live feed is **SSE** (so the API must be a
+persistent process, not serverless), the demo needs **Postgres only** (the seed writes artifact
+*rows*; MinIO/Redis aren't touched at boot), and there was **one real gap** — `server.ts` ignored
+the platform-injected `PORT`. **ADR-008** records the topology: Neon (Postgres) + Render (API, free
+Docker web service) + Vercel (dashboard) + GitHub Actions (CI + the scheduled critic), with the blob
+store an optional add-on.
+
+The image **self-provisions**: `infra/deploy/Dockerfile` does a `tsx`-only install (skipping the web
+app's deps via `--filter=!@memos/web`), and `docker-entrypoint.sh` runs **migrate → seed → serve**,
+both idempotent, so a fresh Neon DB comes up ready on first boot and every redeploy is safe.
+`render.yaml` is a Blueprint with three `sync:false` secrets; `vercel.json` pins Next.js; the one
+cross-service coupling is a shared `MEMOS_OPERATOR_TOKEN`. `ci.yml` green-gates every push (compose
+stack → migrate → typecheck → API suite → web build); `critic.yml` runs the evidence critic on a
+schedule against the prod DB. `docs/DEPLOY.md` is the ~10-minute click-by-click (the only manual
+part: create three free accounts and paste secrets once).
+
+`testing/phase10.sh` proves the deploy artifacts **locally, for free**: it builds the production
+image, runs it against the compose Postgres on an injected `PORT=9099` (proving the port fix),
+asserts the entrypoint self-migrated/seeded by smoke-testing `agent.me` + `objective.query` through
+the container, re-runs it to prove redeploy idempotency, and lints the configs for env drift.
+
+Gate green: `pnpm typecheck` clean; **111** API tests; web build clean; `testing/phase10.sh` green;
+`smoke_all.sh` **0–10** all green. **MemOS is deployable** — one Blueprint click + a few pasted
+secrets from a live URL.
