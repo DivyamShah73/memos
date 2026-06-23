@@ -11,6 +11,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db as ownerDb } from "../db/index.js";
 import { memberships, orgs, projects, teams, users } from "../db/schema.js";
+import { generateToken, hashToken, type AuthedAgent } from "./auth.js";
 
 // scrypt params: N=16384 (2^14) is a sensible interactive cost; login is rare so the sync call is fine.
 const SCRYPT = { N: 16384, r: 8, p: 1 } as const;
@@ -150,4 +151,88 @@ export async function provisionOrg(opts: ProvisionOrgOpts): Promise<{ userId: st
     .values({ orgId: opts.orgId, userId: u.id, scopeKind: "org", scopeId: opts.orgId, role: "ceo" })
     .onConflictDoNothing();
   return { userId: u.id };
+}
+
+export interface ProvisionUserOpts {
+  orgId: string;
+  email: string;
+  password: string;
+  displayName: string;
+  role: "member" | "manager" | "ceo";
+  scopeKind: "org" | "team" | "project";
+  scopeId: string;
+}
+
+/** Create (idempotent by org+email) a user and one membership. Owner connection. Used by seed now
+ * and by the invite/member-add intents in Phase 14. */
+export async function provisionUser(opts: ProvisionUserOpts): Promise<{ userId: string }> {
+  const existing = await ownerDb
+    .select({ id: users.id })
+    .from(users)
+    .where(and(sql`lower(${users.email}) = lower(${opts.email})`, eq(users.orgId, opts.orgId)))
+    .limit(1);
+  let userId = existing[0]?.id;
+  if (!userId) {
+    const [u] = await ownerDb
+      .insert(users)
+      .values({
+        orgId: opts.orgId,
+        email: opts.email,
+        passwordHash: hashPassword(opts.password),
+        displayName: opts.displayName,
+      })
+      .returning({ id: users.id });
+    userId = u.id;
+  }
+  await ownerDb
+    .insert(memberships)
+    .values({
+      orgId: opts.orgId,
+      userId,
+      scopeKind: opts.scopeKind,
+      scopeId: opts.scopeId,
+      role: opts.role,
+    })
+    .onConflictDoNothing();
+  return { userId };
+}
+
+/** Highest role among a user's memberships (ceo > manager > member) — the principal's effective role. */
+function topRole(roles: string[]): "member" | "manager" | "ceo" {
+  if (roles.includes("ceo")) return "ceo";
+  if (roles.includes("manager")) return "manager";
+  return "member";
+}
+
+/** Mint a fresh dashboard-session bearer token for a user and store its hash (rotates any prior one).
+ * The raw token is returned once (held in the dashboard's signed session cookie). */
+export async function startUserSession(userId: string): Promise<string> {
+  const raw = generateToken();
+  await ownerDb.update(users).set({ sessionTokenHash: hashToken(raw) }).where(eq(users.id, userId));
+  return raw;
+}
+
+/**
+ * Resolve a dashboard-session token to a user PRINCIPAL shaped like an agent (so dispatch treats
+ * agents and users uniformly): id = user id, role = highest membership role, scopes = the user's
+ * accessible projects. Owner connection (by-credential lookup before the org GUC exists, like agent
+ * auth). Returns null on unknown/disabled.
+ */
+export async function resolveUserPrincipal(rawToken: string): Promise<AuthedAgent | null> {
+  const rows = await ownerDb
+    .select({ id: users.id, orgId: users.orgId, status: users.status })
+    .from(users)
+    .where(eq(users.sessionTokenHash, hashToken(rawToken)))
+    .limit(1);
+  const u = rows[0];
+  if (!u || u.status !== "active") return null;
+  const scope = await resolveUserScope(u.orgId, u.id);
+  return {
+    id: u.id,
+    teamId: null,
+    orgId: u.orgId,
+    role: topRole(scope.roles),
+    scopes: scope.projects,
+    trustScore: "0",
+  };
 }

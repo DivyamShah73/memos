@@ -71,6 +71,13 @@
       "when": 1782245226168,
       "tag": "0009_curly_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782247014878,
+      "tag": "0010_majestic_robbie_robertson",
+      "breakpoints": true
     }
   ]
 }

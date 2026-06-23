@@ -452,11 +452,15 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(), // scrypt (low-entropy secret), NOT sha256
     displayName: text("display_name").notNull(),
     status: text("status").notNull().default("active"), // active | disabled
+    // sha256 of the current dashboard-session bearer token (Phase 13). The token is a 256-bit
+    // random secret (like agent tokens), so SHA-256 by-hash lookup is correct (not a password KDF).
+    sessionTokenHash: text("session_token_hash"),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex("users_email_idx").on(sql`lower(${t.email})`), // case-insensitive unique login
     index("users_org_idx").on(t.orgId),
+    index("users_session_token_idx").on(t.sessionTokenHash), // by-token auth lookup
     check("users_status_check", sql`${t.status} in ('active','disabled')`),
   ],
 );

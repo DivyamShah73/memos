@@ -16,6 +16,7 @@ import {
   trustLeaderboardInputSchema,
   checkinInputSchema,
   enrollInputSchema,
+  userLoginInputSchema,
   factQueryInputSchema,
   factRecordInputSchema,
   keyResultUpdateInputSchema,
@@ -32,6 +33,7 @@ import {
 import type { IntentContext } from "./context.js";
 import type { Envelope } from "./envelope.js";
 import { enroll } from "../intents/agent.enroll.js";
+import { userLogin } from "../intents/user.login.js";
 import { workflowCreate } from "../intents/workflow.create.js";
 import { checkin } from "../intents/checkin.js";
 import { artifactUpload } from "../intents/artifact.upload.js";
@@ -71,6 +73,14 @@ export const registry = new Map<string, IntentDef>([
       schema: enrollInputSchema,
       handler: enroll as IntentDef["handler"],
       requiresAuth: false,
+    },
+  ],
+  [
+    "user.login",
+    {
+      schema: userLoginInputSchema,
+      handler: userLogin as IntentDef["handler"],
+      requiresAuth: false, // public — exchanges email+password for a session token
     },
   ],
   [

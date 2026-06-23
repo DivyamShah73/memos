@@ -11,6 +11,7 @@ import { registry } from "./registry.js";
 import { ERROR_TYPE, fail, statusFor, type Envelope } from "./envelope.js";
 import { extractBearer, resolveAgent, type AuthedAgent } from "./auth.js";
 import { authorize } from "./authz.js";
+import { resolveUserPrincipal } from "./users.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { makeWithScope } from "./scope.js";
 import type { IntentContext } from "./context.js";
@@ -60,7 +61,10 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
     if (requiresAuth) {
       const bearer = extractBearer(input.authHeader);
       if (!bearer) return done(fail("missing bearer token", ERROR_TYPE.unauthorized));
-      agent = await resolveAgent(gatewayDb, bearer);
+      // A bearer is either an agent token (agents table, by hash) or a dashboard user-session token
+      // (users table, by hash). Both resolve to the same AuthedAgent principal shape so the rest of
+      // the pipeline (org/project GUC, authz guard) is uniform (Phase 13/ADR-011).
+      agent = (await resolveAgent(gatewayDb, bearer)) ?? (await resolveUserPrincipal(bearer));
       if (!agent) return done(fail("invalid or revoked token", ERROR_TYPE.unauthorized));
     }
 

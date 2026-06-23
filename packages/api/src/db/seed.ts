@@ -13,7 +13,7 @@
 import "../env.js"; // side effect: loads the repo-root .env
 import { createHash } from "node:crypto";
 import { db, queryClient } from "./index.js";
-import { provisionOrg } from "../core/users.js";
+import { provisionOrg, provisionUser } from "../core/users.js";
 import {
   agents,
   artifacts,
@@ -53,6 +53,15 @@ async function run(): Promise<void> {
     orgId: "org2", orgName: "Globex", teamId: "team.globex", teamName: "Globex Platform",
     projectId: "project.globex", projectName: "Globex Inference",
     ceoEmail: "ceo@globex.test", ceoPassword: "demo-ceo-pass", ceoName: "Globex CEO",
+  });
+  // A manager + a member in Acme so the dashboard's three role-views are all demoable (Phase 13).
+  await provisionUser({
+    orgId: "org", email: "manager@acme.test", password: "demo-manager-pass",
+    displayName: "Acme Manager", role: "manager", scopeKind: "team", scopeId: "team.demo",
+  });
+  await provisionUser({
+    orgId: "org", email: "member@acme.test", password: "demo-member-pass",
+    displayName: "Acme Member", role: "member", scopeKind: "project", scopeId: "project.demo",
   });
 
   // The operator the dashboard logs in as (token held server-side only).
