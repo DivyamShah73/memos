@@ -22,11 +22,18 @@ export async function trustLeaderboard(
     return fail(`project ${project_id} is not in scope`, ERROR_TYPE.forbidden);
   }
 
+  // `agents` has no RLS (it's read by-token during auth), so org-scope this enumeration in the
+  // handler: same team AND same org — defense-in-depth against a same-id team across orgs.
   const agentRows = agent.teamId
     ? await ctx.db
         .select({ id: agents.id, displayName: agents.displayName, trustScore: agents.trustScore })
         .from(agents)
-        .where(eq(agents.teamId, agent.teamId))
+        .where(
+          and(
+            eq(agents.teamId, agent.teamId),
+            agent.orgId ? eq(agents.orgId, agent.orgId) : undefined,
+          ),
+        )
     : [];
 
   const counts = await withScope((tx) =>

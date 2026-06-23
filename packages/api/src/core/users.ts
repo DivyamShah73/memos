@@ -8,7 +8,7 @@
  * handler does AFTER login goes through the scoped `memos_app` connection with the org+project GUCs.
  */
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db as ownerDb } from "../db/index.js";
 import { memberships, orgs, projects, teams, users } from "../db/schema.js";
 
@@ -75,10 +75,12 @@ export interface UserScope {
  * project scope. (Role *capability* enforcement is Phase 12; this only resolves read reach.)
  */
 export async function resolveUserScope(orgId: string, userId: string): Promise<UserScope> {
+  // Scope to (userId AND orgId): the owner connection bypasses RLS, so this must self-scope by org
+  // — never widen a user's reach with another org's memberships (defense-in-depth).
   const mems = await ownerDb
     .select({ scopeKind: memberships.scopeKind, scopeId: memberships.scopeId, role: memberships.role })
     .from(memberships)
-    .where(eq(memberships.userId, userId));
+    .where(and(eq(memberships.userId, userId), eq(memberships.orgId, orgId)));
 
   const projectSet = new Set<string>();
   const roles: string[] = [];
@@ -101,7 +103,9 @@ export interface ProvisionOrgOpts {
   orgId: string;
   orgName: string;
   teamId: string;
+  teamName?: string;
   projectId: string;
+  projectName?: string;
   ceoEmail: string;
   ceoPassword: string;
   ceoName?: string;
@@ -116,17 +120,19 @@ export async function provisionOrg(opts: ProvisionOrgOpts): Promise<{ userId: st
   await ownerDb.insert(orgs).values({ id: opts.orgId, name: opts.orgName }).onConflictDoNothing();
   await ownerDb
     .insert(teams)
-    .values({ id: opts.teamId, orgId: opts.orgId, name: opts.teamId })
+    .values({ id: opts.teamId, orgId: opts.orgId, name: opts.teamName ?? opts.teamId })
     .onConflictDoNothing();
   await ownerDb
     .insert(projects)
-    .values({ id: opts.projectId, teamId: opts.teamId, orgId: opts.orgId, name: opts.projectId })
+    .values({ id: opts.projectId, teamId: opts.teamId, orgId: opts.orgId, name: opts.projectName ?? opts.projectId })
     .onConflictDoNothing();
 
+  // Email check scoped to THIS org (owner connection bypasses RLS): a same email in another org
+  // must not silently return that org's user. (Per-org email + login disambiguation is Phase 13/14.)
   const existing = await ownerDb
     .select({ id: users.id })
     .from(users)
-    .where(sql`lower(${users.email}) = lower(${opts.ceoEmail})`)
+    .where(and(sql`lower(${users.email}) = lower(${opts.ceoEmail})`, eq(users.orgId, opts.orgId)))
     .limit(1);
   if (existing[0]) return { userId: existing[0].id };
 

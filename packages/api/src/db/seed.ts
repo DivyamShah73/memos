@@ -23,9 +23,6 @@ import {
   learnings,
   milestones,
   objectives,
-  orgs,
-  projects,
-  teams,
   workflowRuns,
 } from "./schema.js";
 
@@ -45,22 +42,18 @@ const dummyHash = (id: string) => createHash("sha256").update(`seed:${id}`).dige
 
 async function run(): Promise<void> {
   // Human identity (Phase 11): a CEO per org + a SECOND org (Globex) so cross-org isolation is
-  // demonstrable. provisionOrg is idempotent and also creates org/team/project rows.
+  // demonstrable. provisionOrg is idempotent and creates the org/team/project rows (with their
+  // display names), so no separate org/team/project inserts are needed for the demo project.
   await provisionOrg({
-    orgId: "org", orgName: "Acme AI", teamId: "team.demo", projectId: "project.demo",
+    orgId: "org", orgName: "Acme AI", teamId: "team.demo", teamName: "Platform",
+    projectId: "project.demo", projectName: "Inference Platform",
     ceoEmail: "ceo@acme.test", ceoPassword: "demo-ceo-pass", ceoName: "Acme CEO",
   });
   await provisionOrg({
-    orgId: "org2", orgName: "Globex", teamId: "team.globex", projectId: "project.globex",
+    orgId: "org2", orgName: "Globex", teamId: "team.globex", teamName: "Globex Platform",
+    projectId: "project.globex", projectName: "Globex Inference",
     ceoEmail: "ceo@globex.test", ceoPassword: "demo-ceo-pass", ceoName: "Globex CEO",
   });
-
-  await db.insert(orgs).values({ id: "org", name: "Acme AI" }).onConflictDoNothing();
-  await db.insert(teams).values({ id: "team.demo", orgId: "org", name: "Platform" }).onConflictDoNothing();
-  await db
-    .insert(projects)
-    .values({ id: "project.demo", teamId: "team.demo", orgId: "org", name: "Inference Platform", okrsRequired: false })
-    .onConflictDoNothing();
 
   // The operator the dashboard logs in as (token held server-side only).
   await db
