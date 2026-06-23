@@ -18,6 +18,9 @@ test("login → OKR tree renders → a new fact streams into the live feed", asy
   await expect(page.getByText("Live activity")).toBeVisible();
 
   // 3. Post a fact straight to the gateway → it must appear in the feed live (SSE, no refresh).
+  // Give the browser's EventSource a moment to connect first — the activity bus has no replay
+  // for events emitted in the connect window (ADR-007), so posting too early would miss it.
+  await page.waitForTimeout(2000);
   const marker = `e2e-fact-${Date.now()}`;
   const api = await request.newContext();
   const res = await api.post(`${API}/v1/intent/fact.record`, {

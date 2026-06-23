@@ -23,3 +23,7 @@ export * from "./schemas/question.ask.js";
 export * from "./schemas/question.answer.js";
 export * from "./schemas/activity.recent.js";
 export * from "./schemas/agent.me.js";
+export * from "./schemas/provenance.trace.js";
+export * from "./schemas/learning.list.js";
+export * from "./schemas/brief.create.js";
+export * from "./schemas/trust.leaderboard.js";

@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { db, queryClient } from "./index.js";
 import {
   agents,
+  artifacts,
   checkins,
   facts,
   learnings,
@@ -30,11 +31,14 @@ const OPERATOR_TOKEN = process.env.MEMOS_OPERATOR_TOKEN ?? "syn_demo_operator_00
 const tokenHash = createHash("sha256").update(OPERATOR_TOKEN).digest("hex");
 
 const BD = "memos-demo0001";
+const BD2 = "memos-demo0002"; // a run BOUND to the root objective, for the full provenance chain
 const O = (n: number) => `a0000000-0000-4000-8000-00000000000${n}`;
 const M = (n: number) => `b0000000-0000-4000-8000-00000000000${n}`;
 const F = (n: number) => `c0000000-0000-4000-8000-00000000000${n}`;
 const L = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`;
 const C = (n: number) => `e0000000-0000-4000-8000-00000000000${n}`;
+const A = (n: number) => `f0000000-0000-4000-8000-00000000000${n}`;
+const dummyHash = (id: string) => createHash("sha256").update(`seed:${id}`).digest("hex");
 
 async function run(): Promise<void> {
   await db.insert(orgs).values({ id: "org", name: "Acme AI" }).onConflictDoNothing();
@@ -55,6 +59,17 @@ async function run(): Promise<void> {
       scopes: ["project.demo"],
       trustScore: "1.0",
     })
+    .onConflictDoNothing();
+
+  // A few teammates with varied trust scores, for the leaderboard. (Dummy token hashes — these
+  // agents are seeded for display/provenance, not used to authenticate.)
+  await db
+    .insert(agents)
+    .values([
+      { id: "agent.scout", displayName: "Scout", apiTokenHash: dummyHash("scout"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.9" },
+      { id: "agent.builder", displayName: "Builder", apiTokenHash: dummyHash("builder"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.7" },
+      { id: "agent.novice", displayName: "Novice", apiTokenHash: dummyHash("novice"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.4" },
+    ])
     .onConflictDoNothing();
 
   await db
@@ -80,6 +95,17 @@ async function run(): Promise<void> {
     ])
     .onConflictDoNothing();
 
+  // A run BOUND to the root objective + an evidence artifact on it — the spine the provenance
+  // graph walks (learning → artifact → run → OKR → agent).
+  await db
+    .insert(workflowRuns)
+    .values({ bdId: BD2, projectId: "project.demo", agentId: "agent.scout", workflowClass: "benchmark", title: "Batching benchmark", targetObjectiveId: O(1) })
+    .onConflictDoNothing();
+  await db
+    .insert(artifacts)
+    .values({ id: A(1), projectId: "project.demo", bdId: BD2, kind: "benchmark", bucketPath: "project.demo/seed-benchmark", sizeBytes: 2048, sha256: "0".repeat(64) })
+    .onConflictDoNothing();
+
   // Recent activity for the live feed.
   await db
     .insert(facts)
@@ -92,6 +118,10 @@ async function run(): Promise<void> {
     .insert(learnings)
     .values([
       { id: L(1), projectId: "project.demo", bdId: BD, agentId: "agent.operator", claim: "continuous batching helps tail latency more than mean throughput", appliesTo: ["vllm-deployment", "latency"], confidence: "low" },
+      // The high-reuse, evidence-backed learning — the one to click in the provenance view.
+      { id: L(2), projectId: "project.demo", bdId: BD2, agentId: "agent.scout", claim: "batch size 32 is the latency/throughput knee for this model", appliesTo: ["vllm-deployment", "latency"], confidence: "medium", nonObviousMarker: "counterintuitive: larger batches past 32 regress p95", evidenceArtifactId: A(1), reuseSuccessCount: 5 },
+      { id: L(3), projectId: "project.demo", bdId: BD, agentId: "agent.builder", claim: "warmup requests remove first-call cold start", appliesTo: ["vllm-deployment"], confidence: "low", reuseSuccessCount: 2 },
+      { id: L(4), projectId: "project.demo", bdId: BD, agentId: "agent.novice", claim: "logging every token is too verbose for prod", appliesTo: ["observability"], confidence: "low", reuseSuccessCount: 0 },
     ])
     .onConflictDoNothing();
   await db

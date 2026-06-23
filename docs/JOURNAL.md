@@ -339,3 +339,34 @@ read surface + a live SSE frame over HTTP (post a fact → an `event: activity` 
 **Playwright** drives the real browser end-to-end — log in → the seeded OKR tree renders → a fact
 posted to the gateway **appears in the feed within ~1s without a refresh**. `smoke_all` now chains
 0–7. The two showpieces (OKR rollups + the live feed) are live; the provenance graph is Phase 8.
+
+---
+
+## 2026-06-23 — Phase 8: provenance graph + governance views (showpiece, part 2)
+
+The visual payoff of the whole `bd_id` spine. Four read/write intents + three dashboard views;
+no migration (all data already exists). **`provenance.trace`** walks a learning's lineage —
+learning → evidence artifact → workflow run → objective (OKR) → authoring agent — into
+nodes/edges; **`learning.list`** ranks learnings by reuse (the picker); **`brief.create`** lets
+an operator author a standing brief; **`trust.leaderboard`** ranks team agents by trust. The web
+adds **`/provenance`** (a React Flow graph that lights up the chain when you click a learning;
+selection is server-side via `?learning=<id>`), **`/leaderboard`**, and **`/briefs`** (a
+server-action authoring form). The seed gained an evidence-backed, objective-bound, high-reuse
+learning + three teammates with varied trust so the graph and leaderboard have real shape.
+
+**Scope:** the 3 exit-gate views; token/member management deferred to Phase 9. **No new ADR** —
+provenance.trace is a read view over the existing spine, and `brief.create`'s open-write is
+already governed by ADR-006 (read-isolation is the boundary); the dashboard-via-gateway pattern
+is ADR-007.
+
+The headline find (a **real latent bug**, caught while testing `brief.create`): under FORCE RLS,
+`INSERT ... RETURNING` re-applies the `briefs_select` policy, so returning a brief that targets
+*someone other than the author* (the normal case) raised a spurious `42501`. The same bug lurked
+in `question.answer` (it only passed because its tests self-target). Fixed both by generating the
+UUID in the handler and inserting it explicitly — no `RETURNING`.
+
+Gate green: `pnpm typecheck` clean; `pnpm --filter @memos/api test` → 102 + the 4 new suites
+(incl. the cross-agent brief round-trip + provenance chain node/edge assertions); web build clean;
+`testing/phase8.sh` proves the chain + brief round-trip + leaderboard over HTTP; **Playwright**
+clicks the high-reuse learning and asserts its objective + agent nodes render, and authors a brief
+that appears in the list. `smoke_all` now chains 0–8. Day 2's dashboard is feature-complete.

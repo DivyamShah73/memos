@@ -38,3 +38,40 @@ export interface AgentContext {
   team_id: string | null;
   org_id: string | null;
 }
+
+export interface ProvNode {
+  id: string;
+  type: "learning" | "artifact" | "run" | "objective" | "agent";
+  label: string;
+}
+export interface ProvEdge {
+  from: string;
+  to: string;
+  label: string;
+}
+
+export interface LearningListItem {
+  id: string;
+  claim: string;
+  confidence: string;
+  applies_to: string[];
+  reuse_success_count: number;
+  has_evidence: boolean;
+}
+
+export interface LeaderboardRow {
+  agent_id: string;
+  display_name: string;
+  trust_score: number;
+  learnings_authored: number;
+}
+
+export interface BriefRow {
+  id: string;
+  title: string;
+  body: string;
+  target_kind: string;
+  target_id: string;
+  effective_from: string;
+  created_at: string;
+}
