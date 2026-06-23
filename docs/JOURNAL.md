@@ -430,3 +430,36 @@ the container, re-runs it to prove redeploy idempotency, and lints the configs f
 Gate green: `pnpm typecheck` clean; **111** API tests; web build clean; `testing/phase10.sh` green;
 `smoke_all.sh` **0–10** all green. **MemOS is deployable** — one Blueprint click + a few pasted
 secrets from a live URL.
+
+---
+
+## 2026-06-23 — Phase 11: multi-org tenancy foundation (v2 bedrock)
+
+The start of v2 — turning a single-operator system into a multi-org product. The whole phase
+turns on one ordering problem (**ADR-009**): auth must read identity to discover the org *before*
+an org GUC can be set, so naively RLS-ing the control plane would deadlock the gateway out of its
+own auth tables. Resolved by **denormalizing `org_id`** onto `agents`/`enrollment_codes`/`projects`
+(+ the new `users`/`memberships`) so `resolveAgent` gets the org from a single by-token-hash row (no
+more `teams` join), and `enroll` stamps it from the code row. A third request-local GUC,
+`memos.org_id`, is set post-auth in `makeWithScope` alongside the project + identity GUCs.
+
+**People are now first-class and org-bounded.** New `users` (scrypt-hashed passwords — a low-entropy
+secret, unlike the 256-bit agent tokens that stay SHA-256) and `memberships` (`(user, scope_kind,
+scope_id) → role`, role ∈ ceo|manager|member). `core/users.ts` adds `loginUser`/`resolveUserScope`/
+`provisionOrg` (auth-bootstrap reads use the owner connection — they run before the org is known).
+A user's read scope (CEO → all org projects; manager → team projects; member → project) feeds the
+*same* `agent_projects` GUC, so one isolation mechanism serves agents and humans.
+
+The DB-enforced isolation this phase: **`users` + `memberships` get FORCE RLS on the org GUC** —
+org B can never read org A's people. Nothing reads those tables pre-GUC (login-by-email uses the
+owner connection), so no auth deadlock. Structural-table (projects/teams) enumeration RLS is
+deferred to the phase that introduces enumeration intents (13/14) — until then no cross-org
+enumeration path exists, and forcing RLS there now would regress handler reads that use the
+non-scoped path. `org_id` was added nullable, backfilled from team→org (all pre-migration data is
+single-org), then set NOT NULL (migration 0008; drizzle-generated DDL + hand-authored backfill +
+RLS, like 0002/0004/0007).
+
+Gate green: `pnpm typecheck` clean (4 workspaces); **118** API tests (7 new — multi-org people
+isolation + the unset-GUC default-deny + human auth/scope); `drizzle-kit generate` no-diff; web
+build clean; `testing/phase11.sh` proves cross-org isolation over the wire under `memos_app`;
+**`smoke_all.sh` 0–11 all green** — the agent loop + project isolation never regressed.

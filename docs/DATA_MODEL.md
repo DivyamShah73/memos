@@ -309,4 +309,17 @@ choice.status:      open ──► resolved        (outcome filled; stale-open �
 - Invariant tests live next to handlers; the `evidence-gate-check` skill is the merge gate for any write-path change.
 - Test UTF-8 round-trip (`≤`, `—`, emoji) on `claim`/`title` — the system we modeled corrupted these; we won't.
 
+## 8. Human identity (Phase 11 / ADR-009)
+- **`users`** — humans (distinct from agents), org-bounded: `org_id`, unique `lower(email)`, scrypt
+  `password_hash` (low-entropy secret; agent tokens stay SHA-256), `display_name`, `status`.
+- **`memberships`** — `(user_id, scope_kind ∈ org|team|project, scope_id) → role ∈ ceo|manager|member`,
+  unique per `(user, scope_kind, scope_id)`. A user's read scope is the union of their memberships
+  (CEO → all org projects, manager → team projects, member → the project).
+- **`org_id` denormalized** onto `agents`, `enrollment_codes`, `projects` so auth resolves the org
+  from a single by-credential row (no `teams` join) and isolation keys on it uniformly.
+- **Isolation:** `users` + `memberships` are FORCE-RLS'd on the `memos.org_id` GUC (org B never sees
+  org A's people). The data plane stays project-scoped (its cross-org isolation is implied — an agent
+  only ever holds its own org's project ids). Structural-table enumeration RLS lands with the
+  enumeration features (Phase 13/14).
+
 The canonical, always-current schema is the Drizzle definition in code. When they diverge, **code wins** — update this doc to match (it's documentation, not the source of truth).
