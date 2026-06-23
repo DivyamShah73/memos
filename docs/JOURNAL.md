@@ -463,3 +463,31 @@ Gate green: `pnpm typecheck` clean (4 workspaces); **118** API tests (7 new — 
 isolation + the unset-GUC default-deny + human auth/scope); `drizzle-kit generate` no-diff; web
 build clean; `testing/phase11.sh` proves cross-org isolation over the wire under `memos_app`;
 **`smoke_all.sh` 0–11 all green** — the agent loop + project isolation never regressed.
+
+---
+
+## 2026-06-24 — Phase 12: roles & authorization (autonomous)
+
+Isolation answered "what can you see"; this adds "what may you do". **ADR-010**: a `role` on the
+principal (member | manager | ceo, default member, inherited from the enrollment code; seeded
+operator = manager) + a **central capability matrix** in `core/authz.ts` (two sets + a pure
+`authorize(intent, role)`), enforced at the single dispatch choke point right after auth. Rules:
+**CEO is read-only** (every write denied, even though it outranks for reads), **steering needs
+manager** (objective.publish/update, brief.create, question.answer), everything else is member-level.
+Chose one auditable matrix module over per-intent flags scattered across 23 registry entries — it's a
+security surface, so it should be reviewable at a glance and unit-tested in isolation.
+
+Migration 0009 adds `agents.role` + `enrollment_codes.role` (drizzle-gen DDL + a hand `UPDATE` to
+elevate the demo operator). `resolveAgent` now returns `role`; `enroll` inherits it from the code.
+The behavioral change rippled: agent-driven flows that steer (4 test suites + several phase scripts +
+the SDK e2e) now need a `manager` code — updated accordingly (the role *restriction* is proven
+separately, not by those functional scripts).
+
+One self-inflicted snag, caught + fixed: the new authz test first named its agents `authz-*`, but
+`cleanupAndClose` only deletes `vitest-%` agents — so it orphaned agents under the test team, its
+team-delete FK'd, and every later suite's teardown then tripped on the orphans (an 18-suite cascade
+from one mis-named fixture). Renamed to `vitest-authz-*`; clean.
+
+Gate green: `pnpm typecheck` clean; **125** API tests (7 new — the role matrix, pure + through
+dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase12.sh` proves the
+member/manager/ceo guard over HTTP; **`smoke_all.sh` 0–12 all green**.
