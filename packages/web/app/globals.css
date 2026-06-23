@@ -28,27 +28,27 @@ body {
   background: transparent;
 }
 
-/* React Flow zoom controls — the library ships a light theme; restyle to match the dark UI. */
+/* React Flow zoom controls — the library ships a light theme (imported via its own stylesheet in
+   the graph component, which wins the cascade for equal specificity), so override with !important. */
 .react-flow__controls {
-  border: 1px solid #252a38;
+  border: 1px solid #252a38 !important;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
 }
 .react-flow__controls-button {
-  background: #12141c;
-  border-bottom: 1px solid #252a38;
-  color: #e7eaf3;
+  background: #12141c !important;
+  border-bottom: 1px solid #252a38 !important;
 }
 .react-flow__controls-button:hover {
-  background: #181b26;
+  background: #181b26 !important;
 }
 .react-flow__controls-button svg {
-  fill: #e7eaf3;
+  fill: #e7eaf3 !important;
 }
 .react-flow__attribution {
-  background: transparent;
+  background: transparent !important;
 }
 .react-flow__attribution a {
-  color: #8a92a6;
+  color: #8a92a6 !important;
 }
