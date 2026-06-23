@@ -22,10 +22,10 @@ CODE_B="enr_code_p9b_$(date +%s)_$$"
 docker compose exec -T db psql -U postgres -d memos -q -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL
 insert into orgs (id, name) values ('org','Demo Org') on conflict (id) do nothing;
 insert into teams (id, org_id, name) values ('team.demo','org','Demo Team') on conflict (id) do nothing;
-insert into projects (id, team_id, name, okrs_required) values ('project.demo','team.demo','Demo Project',false) on conflict (id) do nothing;
-insert into projects (id, team_id, name, okrs_required) values ('project.other','team.demo','Other Project',false) on conflict (id) do nothing;
-insert into enrollment_codes (code, team_id, scopes) values ('$CODE_A','team.demo','["project.demo"]'::jsonb);
-insert into enrollment_codes (code, team_id, scopes) values ('$CODE_B','team.demo','["project.other"]'::jsonb);
+insert into projects (id, team_id, org_id, name, okrs_required) values ('project.demo','team.demo','org','Demo Project',false) on conflict (id) do nothing;
+insert into projects (id, team_id, org_id, name, okrs_required) values ('project.other','team.demo','org','Other Project',false) on conflict (id) do nothing;
+insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE_A','team.demo','org','["project.demo"]'::jsonb);
+insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE_B','team.demo','org','["project.other"]'::jsonb);
 SQL
 [ $? -eq 0 ] && pass "seeded 2 projects + codes" || fail "seed"
 
