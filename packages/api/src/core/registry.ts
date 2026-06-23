@@ -9,7 +9,11 @@ import {
   agentMeInputSchema,
   artifactUploadInputSchema,
   briefAckInputSchema,
+  briefCreateInputSchema,
   briefFetchInputSchema,
+  learningListInputSchema,
+  provenanceTraceInputSchema,
+  trustLeaderboardInputSchema,
   checkinInputSchema,
   enrollInputSchema,
   factQueryInputSchema,
@@ -46,6 +50,10 @@ import { questionAsk } from "../intents/question.ask.js";
 import { questionAnswer } from "../intents/question.answer.js";
 import { activityRecent } from "../intents/activity.recent.js";
 import { agentMe } from "../intents/agent.me.js";
+import { provenanceTrace } from "../intents/provenance.trace.js";
+import { learningList } from "../intents/learning.list.js";
+import { briefCreate } from "../intents/brief.create.js";
+import { trustLeaderboard } from "../intents/trust.leaderboard.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -206,6 +214,38 @@ export const registry = new Map<string, IntentDef>([
     {
       schema: agentMeInputSchema,
       handler: agentMe as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "provenance.trace",
+    {
+      schema: provenanceTraceInputSchema,
+      handler: provenanceTrace as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "learning.list",
+    {
+      schema: learningListInputSchema,
+      handler: learningList as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "brief.create",
+    {
+      schema: briefCreateInputSchema,
+      handler: briefCreate as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "trust.leaderboard",
+    {
+      schema: trustLeaderboardInputSchema,
+      handler: trustLeaderboard as IntentDef["handler"],
       requiresAuth: true,
     },
   ],

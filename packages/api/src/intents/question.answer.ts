@@ -4,6 +4,7 @@
  * already-answered question is a clean business error. Filing the brief is allowed by the
  * briefs_insert WITH CHECK (true) policy — read-isolation, not write, is the briefs boundary.
  */
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { QuestionAnswerInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
@@ -66,17 +67,19 @@ export async function questionAnswer(
       }
 
       const subject = found[0].subject ?? "your question";
-      const [brief] = await tx
-        .insert(briefs)
-        .values({
-          title: `Re: ${subject}`,
-          body: answer,
-          targetKind: "agent",
-          targetId: found[0].askerId ?? agent.id,
-          authorId: agent.id,
-        })
-        .returning({ id: briefs.id });
-      return { kind: "answered", briefId: brief.id };
+      // Generate the id rather than RETURNING: the answer brief targets the asker (often a
+      // different agent), and under FORCE RLS, RETURNING would re-apply briefs_select and hide
+      // that row from the answerer → a spurious 42501. (Same fix as brief.create.)
+      const briefId = randomUUID();
+      await tx.insert(briefs).values({
+        id: briefId,
+        title: `Re: ${subject}`,
+        body: answer,
+        targetKind: "agent",
+        targetId: found[0].askerId ?? agent.id,
+        authorId: agent.id,
+      });
+      return { kind: "answered", briefId };
     });
 
     if (result.kind === "validation") return fail(result.message, ERROR_TYPE.badRequest);
