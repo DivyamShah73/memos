@@ -4,7 +4,6 @@ import { relativeTime } from "@/lib/utils";
 import type { BriefRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-const PROJECT = getProjectId();
 
 async function createBrief(formData: FormData) {
   "use server";
@@ -23,6 +22,7 @@ async function createBrief(formData: FormData) {
 }
 
 export default async function BriefsPage() {
+  const PROJECT = await getProjectId();
   const { briefs } = await callIntent<{ briefs: BriefRow[] }>("brief.fetch", {
     project_id: PROJECT,
   }).catch(() => ({ briefs: [] as BriefRow[] }));
