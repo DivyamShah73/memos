@@ -27,3 +27,28 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* React Flow zoom controls — the library ships a light theme; restyle to match the dark UI. */
+.react-flow__controls {
+  border: 1px solid #252a38;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.react-flow__controls-button {
+  background: #12141c;
+  border-bottom: 1px solid #252a38;
+  color: #e7eaf3;
+}
+.react-flow__controls-button:hover {
+  background: #181b26;
+}
+.react-flow__controls-button svg {
+  fill: #e7eaf3;
+}
+.react-flow__attribution {
+  background: transparent;
+}
+.react-flow__attribution a {
+  color: #8a92a6;
+}
