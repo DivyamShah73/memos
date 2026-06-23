@@ -10,6 +10,7 @@ import { ZodError } from "zod";
 import { registry } from "./registry.js";
 import { ERROR_TYPE, fail, statusFor, type Envelope } from "./envelope.js";
 import { extractBearer, resolveAgent, type AuthedAgent } from "./auth.js";
+import { authorize, type Role } from "./authz.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { makeWithScope } from "./scope.js";
 import type { IntentContext } from "./context.js";
@@ -74,6 +75,14 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
 
     // 3. Unknown intent (only reachable once authed, so it doesn't leak to anon callers).
     if (!entry) return done(fail(`unknown intent: ${input.name}`, ERROR_TYPE.notFound));
+
+    // 3.5 Authorization by role (Phase 12 / ADR-010) — after auth, before the handler. The role→
+    // capability matrix lives in authz.ts; CEO is read-only, steering needs manager. Public intents
+    // (agent === null) skip this — agent.enroll has no principal.
+    if (agent) {
+      const az = authorize(input.name, (agent.role ?? "member") as Role);
+      if (!az.allowed) return done(fail(az.reason ?? "forbidden", ERROR_TYPE.forbidden));
+    }
 
     // 4. Parse the JSON body (empty body is treated as {}; malformed is a 400, not a 500).
     let parsed: unknown;

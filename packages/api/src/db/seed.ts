@@ -64,6 +64,7 @@ async function run(): Promise<void> {
       apiTokenHash: tokenHash,
       teamId: "team.demo",
       orgId: "org",
+      role: "manager", // the dashboard operator steers (authors briefs/OKRs) → manager (ADR-010)
       scopes: ["project.demo"],
       trustScore: "1.0",
     })

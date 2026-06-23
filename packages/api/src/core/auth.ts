@@ -14,6 +14,8 @@ export interface AuthedAgent {
   teamId: string | null;
   /** Org owning the agent (denormalized onto agents in Phase 11/ADR-009). Drives the org GUC. */
   orgId: string | null;
+  /** Authorization role (Phase 12/ADR-010): member | manager | ceo. Drives the dispatch authz guard. */
+  role: string;
   scopes: string[];
   trustScore: string;
 }
@@ -52,6 +54,7 @@ export async function resolveAgent(
       id: agents.id,
       teamId: agents.teamId,
       orgId: agents.orgId,
+      role: agents.role,
       scopes: agents.scopes,
       trustScore: agents.trustScore,
     })
@@ -64,6 +67,7 @@ export async function resolveAgent(
     id: a.id,
     teamId: a.teamId,
     orgId: a.orgId ?? null,
+    role: a.role ?? "member",
     scopes: a.scopes ?? [],
     trustScore: a.trustScore,
   };

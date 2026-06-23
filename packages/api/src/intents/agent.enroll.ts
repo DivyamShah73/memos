@@ -54,12 +54,13 @@ export async function enroll(ctx: IntentContext, input: EnrollInput): Promise<En
           .returning({
             teamId: enrollmentCodes.teamId,
             orgId: enrollmentCodes.orgId,
+            role: enrollmentCodes.role,
             scopes: enrollmentCodes.scopes,
           });
 
         if (claimed.length === 0) return { raced: true as const };
 
-        const { teamId, orgId, scopes } = claimed[0];
+        const { teamId, orgId, role, scopes } = claimed[0];
         const scopeList = scopes ?? [];
         await tx.insert(agents).values({
           id: agentId,
@@ -67,6 +68,7 @@ export async function enroll(ctx: IntentContext, input: EnrollInput): Promise<En
           apiTokenHash: tokenHash,
           teamId,
           orgId, // inherit the code's org so the new agent is org-bound (ADR-009)
+          role, // inherit the code's authz role (Phase 12/ADR-010)
           scopes: scopeList,
         });
         return { raced: false as const, scopes: scopeList };
