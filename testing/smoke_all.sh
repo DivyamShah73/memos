@@ -19,4 +19,5 @@ bash testing/phase6.sh   # briefs + questions + governance critic
 bash testing/phase7.sh   # dashboard read surface + live SSE stream
 bash testing/phase8.sh   # provenance trace + brief authoring + trust leaderboard
 bash testing/phase9.sh   # SDK-driven full e2e + invariant proofs
+bash testing/phase10.sh  # deployment artifacts: prod image builds, self-provisions, serves
 echo "=== ALL PHASES GREEN ==="
