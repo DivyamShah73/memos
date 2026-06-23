@@ -17,7 +17,7 @@ import type { IntentContext } from "../core/context.js";
 import type { AuthedAgent } from "../core/auth.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { db as ownerDb } from "../db/index.js";
-import { agents, enrollmentCodes, projects, users } from "../db/schema.js";
+import { agents, enrollmentCodes, projects, teams, users } from "../db/schema.js";
 import {
   provisionOrg,
   provisionUser,
@@ -29,6 +29,10 @@ import {
 const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "org";
 const rid = () => randomBytes(3).toString("hex");
+
+/** Role rank for the no-escalation check — you can only grant a role ≤ your own. */
+const RANK: Record<string, number> = { member: 1, manager: 2, ceo: 3 };
+const rank = (r: string) => RANK[r] ?? 1;
 
 /** Public: create a brand-new org + its first CEO, and return a ready session token. */
 export async function orgSignup(_ctx: IntentContext, input: OrgSignupInput): Promise<Envelope> {
@@ -61,6 +65,10 @@ export async function enrollmentCreate(ctx: IntentContext, input: EnrollmentCrea
   if (!a.scopes.includes(input.project_id)) {
     return fail(`project ${input.project_id} is not in your scope`, ERROR_TYPE.forbidden);
   }
+  // No escalation: you can't mint a code for a role higher than your own (review H1/L1).
+  if (rank(input.role) > rank(a.role)) {
+    return fail("cannot grant a role higher than your own", ERROR_TYPE.forbidden);
+  }
   const [proj] = await ownerDb
     .select({ teamId: projects.teamId, orgId: projects.orgId })
     .from(projects).where(eq(projects.id, input.project_id)).limit(1);
@@ -78,8 +86,21 @@ export async function enrollmentCreate(ctx: IntentContext, input: EnrollmentCrea
 export async function userInvite(ctx: IntentContext, input: UserInviteInput): Promise<Envelope> {
   const a = principal(ctx);
   if (!a) return fail("authentication required", ERROR_TYPE.unauthorized);
-  if (input.scope_kind === "project" && !a.scopes.includes(input.scope_id)) {
-    return fail(`project ${input.scope_id} is not in your scope`, ERROR_TYPE.forbidden);
+  // No escalation: can't invite someone with a role higher than your own (review H1).
+  if (rank(input.role) > rank(a.role)) {
+    return fail("cannot grant a role higher than your own", ERROR_TYPE.forbidden);
+  }
+  // Bound the membership scope to the actor's org for EVERY scope kind (review H2): a project must
+  // be in the actor's scope; a team must belong to the actor's org; an org scope must be the actor's.
+  if (input.scope_kind === "project") {
+    if (!a.scopes.includes(input.scope_id)) {
+      return fail(`project ${input.scope_id} is not in your scope`, ERROR_TYPE.forbidden);
+    }
+  } else if (input.scope_kind === "team") {
+    const [tm] = await ownerDb.select({ orgId: teams.orgId }).from(teams).where(eq(teams.id, input.scope_id)).limit(1);
+    if (!tm || tm.orgId !== a.orgId) return fail(`team ${input.scope_id} is not in your org`, ERROR_TYPE.forbidden);
+  } else {
+    if (input.scope_id !== a.orgId) return fail(`org ${input.scope_id} is not your org`, ERROR_TYPE.forbidden);
   }
   const { userId } = await provisionUser({
     orgId: a.orgId, email: input.email, password: input.password,

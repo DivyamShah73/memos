@@ -87,6 +87,30 @@ describe("self-serve admin loop", () => {
     expect(login2.status).toBe(401);
   });
 
+  it("no privilege escalation: a manager cannot invite/grant a higher (ceo) role", async () => {
+    // CEO invites a manager on the project, who logs in.
+    const inv = await call("user.invite", ceoToken, {
+      email: "mgr2@admintest.co", password: "mgr2-strong-pw-3", display_name: "Mgr2",
+      role: "manager", scope_kind: "project", scope_id: projectId,
+    });
+    expect(inv.json.ok).toBe(true);
+    const mgrTok = (await call("user.login", null, { email: "mgr2@admintest.co", password: "mgr2-strong-pw-3" })).json.data.api_token.raw;
+
+    // Manager → invite a CEO: denied (can't grant above own role).
+    const esc = await call("user.invite", mgrTok, {
+      email: "sock@admintest.co", password: "sock-strong-pw-4", display_name: "Sock",
+      role: "ceo", scope_kind: "project", scope_id: projectId,
+    });
+    expect(esc.status).toBe(403);
+
+    // Manager → invite a member (≤ own role): allowed.
+    const okInv = await call("user.invite", mgrTok, {
+      email: "m2@admintest.co", password: "m2-strong-pw-5", display_name: "M2",
+      role: "member", scope_kind: "project", scope_id: projectId,
+    });
+    expect(okInv.json.ok).toBe(true);
+  });
+
   it("admin actions are recorded in the audit log", async () => {
     const rows = await ownerDb.select({ action: auditLog.action }).from(auditLog).where(eq(auditLog.orgId, orgId));
     const actions = rows.map((r) => r.action);
