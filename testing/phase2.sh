@@ -25,7 +25,7 @@ OBJ=$(docker compose exec -T db psql -U postgres -d memos -q -t -A -v ON_ERROR_S
 insert into orgs (id, name) values ('org','Demo Org') on conflict (id) do nothing;
 insert into teams (id, org_id, name) values ('team.demo','org','Demo Team') on conflict (id) do nothing;
 insert into projects (id, team_id, org_id, name, okrs_required) values ('$PROJ','team.demo','org','Demo OKR Project',true) on conflict (id) do nothing;
-insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE','team.demo','org','["$PROJ"]'::jsonb);
+insert into enrollment_codes (code, team_id, org_id, role, scopes) values ('$CODE','team.demo','org','manager','["$PROJ"]'::jsonb);
 insert into objectives (project_id, title, status) values ('$PROJ','phase2 objective','active') returning id;
 SQL
 )

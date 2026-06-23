@@ -18,7 +18,7 @@ beforeAll(async () => {
   await seedBase();
   await seedProject(A, false);
   await seedProject(B, false);
-  token = await enrollAgent([A], "vitest-op");
+  token = await enrollAgent([A], "vitest-op", "manager"); // objective.publish is manager-gated (ADR-010)
   bd = await seedWorkflowRun(A);
 });
 

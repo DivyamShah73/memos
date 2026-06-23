@@ -24,8 +24,8 @@ insert into orgs (id, name) values ('org','Demo Org') on conflict (id) do nothin
 insert into teams (id, org_id, name) values ('team.demo','org','Demo Team') on conflict (id) do nothing;
 insert into projects (id, team_id, org_id, name, okrs_required) values ('project.demo','team.demo','org','Demo Project',false) on conflict (id) do nothing;
 insert into projects (id, team_id, org_id, name, okrs_required) values ('project.other','team.demo','org','Other Project',false) on conflict (id) do nothing;
-insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE_A','team.demo','org','["project.demo"]'::jsonb);
-insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE_B','team.demo','org','["project.other"]'::jsonb);
+insert into enrollment_codes (code, team_id, org_id, role, scopes) values ('$CODE_A','team.demo','org','manager','["project.demo"]'::jsonb);
+insert into enrollment_codes (code, team_id, org_id, role, scopes) values ('$CODE_B','team.demo','org','manager','["project.other"]'::jsonb);
 SQL
 [ $? -eq 0 ] && pass "seeded 2 projects + codes" || fail "seed"
 
