@@ -3,7 +3,7 @@
  * each authored in this project. Agents come from the control-plane table (filtered to the
  * caller's team); the authored counts are an in-scope (RLS) group-by over learnings.
  */
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import type { TrustLeaderboardInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
@@ -33,7 +33,7 @@ export async function trustLeaderboard(
     tx
       .select({ agentId: learnings.agentId, n: count() })
       .from(learnings)
-      .where(eq(learnings.projectId, project_id))
+      .where(and(eq(learnings.projectId, project_id), eq(learnings.status, "active")))
       .groupBy(learnings.agentId),
   );
   const byAgent = new Map(counts.map((c) => [c.agentId, Number(c.n)]));

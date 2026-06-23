@@ -251,7 +251,7 @@ curl -N -H "authorization: Bearer $TOK" "$API/v1/stream/activity?project_id=proj
 
 ### `brief.create` — author a standing brief
 - **Auth:** bearer (the author).
-- **Input:** `{ "target_kind": "org"|"team"|"project"|"agent", "target_id": string, "title": string, "body": string, "supersedes_id"?: uuid }`
+- **Input:** `{ "target_kind": "org"|"team"|"project"|"agent", "target_id": string, "title": string, "body": string }`
 - **Returns:** `{ "brief_id": uuid }`
 - **Notes:** authoring is open — a brief is outbound; read-isolation (who can *see* it) is the boundary (ADR-006). The author is the calling agent. Verify delivery via the target's `brief.fetch`.
 

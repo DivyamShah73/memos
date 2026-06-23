@@ -10,7 +10,8 @@ export const briefCreateInputSchema = z.object({
   target_id: z.string().min(1, "is required"),
   title: z.string().min(1, "is required"),
   body: z.string().min(1, "is required"),
-  supersedes_id: z.string().uuid().optional(),
+  // (Supersession deferred: a brief targeting another agent isn't visible to its author under
+  // the briefs_select RLS policy, so validating supersedes_id in-scope can't work cleanly yet.)
 });
 
 export type BriefCreateInput = z.infer<typeof briefCreateInputSchema>;
