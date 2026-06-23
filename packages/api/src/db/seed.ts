@@ -13,6 +13,7 @@
 import "../env.js"; // side effect: loads the repo-root .env
 import { createHash } from "node:crypto";
 import { db, queryClient } from "./index.js";
+import { provisionOrg } from "../core/users.js";
 import {
   agents,
   artifacts,
@@ -22,9 +23,6 @@ import {
   learnings,
   milestones,
   objectives,
-  orgs,
-  projects,
-  teams,
   workflowRuns,
 } from "./schema.js";
 
@@ -43,12 +41,19 @@ const BR = (n: number) => `f1000000-0000-4000-8000-00000000000${n}`;
 const dummyHash = (id: string) => createHash("sha256").update(`seed:${id}`).digest("hex");
 
 async function run(): Promise<void> {
-  await db.insert(orgs).values({ id: "org", name: "Acme AI" }).onConflictDoNothing();
-  await db.insert(teams).values({ id: "team.demo", orgId: "org", name: "Platform" }).onConflictDoNothing();
-  await db
-    .insert(projects)
-    .values({ id: "project.demo", teamId: "team.demo", name: "Inference Platform", okrsRequired: false })
-    .onConflictDoNothing();
+  // Human identity (Phase 11): a CEO per org + a SECOND org (Globex) so cross-org isolation is
+  // demonstrable. provisionOrg is idempotent and creates the org/team/project rows (with their
+  // display names), so no separate org/team/project inserts are needed for the demo project.
+  await provisionOrg({
+    orgId: "org", orgName: "Acme AI", teamId: "team.demo", teamName: "Platform",
+    projectId: "project.demo", projectName: "Inference Platform",
+    ceoEmail: "ceo@acme.test", ceoPassword: "demo-ceo-pass", ceoName: "Acme CEO",
+  });
+  await provisionOrg({
+    orgId: "org2", orgName: "Globex", teamId: "team.globex", teamName: "Globex Platform",
+    projectId: "project.globex", projectName: "Globex Inference",
+    ceoEmail: "ceo@globex.test", ceoPassword: "demo-ceo-pass", ceoName: "Globex CEO",
+  });
 
   // The operator the dashboard logs in as (token held server-side only).
   await db
@@ -58,6 +63,7 @@ async function run(): Promise<void> {
       displayName: "Operator",
       apiTokenHash: tokenHash,
       teamId: "team.demo",
+      orgId: "org",
       scopes: ["project.demo"],
       trustScore: "1.0",
     })
@@ -68,9 +74,9 @@ async function run(): Promise<void> {
   await db
     .insert(agents)
     .values([
-      { id: "agent.scout", displayName: "Scout", apiTokenHash: dummyHash("scout"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.9" },
-      { id: "agent.builder", displayName: "Builder", apiTokenHash: dummyHash("builder"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.7" },
-      { id: "agent.novice", displayName: "Novice", apiTokenHash: dummyHash("novice"), teamId: "team.demo", scopes: ["project.demo"], trustScore: "0.4" },
+      { id: "agent.scout", displayName: "Scout", apiTokenHash: dummyHash("scout"), teamId: "team.demo", orgId: "org", scopes: ["project.demo"], trustScore: "0.9" },
+      { id: "agent.builder", displayName: "Builder", apiTokenHash: dummyHash("builder"), teamId: "team.demo", orgId: "org", scopes: ["project.demo"], trustScore: "0.7" },
+      { id: "agent.novice", displayName: "Novice", apiTokenHash: dummyHash("novice"), teamId: "team.demo", orgId: "org", scopes: ["project.demo"], trustScore: "0.4" },
     ])
     .onConflictDoNothing();
 

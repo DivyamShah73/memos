@@ -36,24 +36,31 @@ export type WithScope = <T>(fn: (tx: ScopedTx) => Promise<T>) => Promise<T>;
 
 /**
  * Build the agent-bound `withScope` helper. Runs `fn` inside a transaction whose first
- * statements set the two request-local GUCs so RLS sees exactly this agent:
+ * statements set the three request-local GUCs so RLS sees exactly this principal:
  *  - `memos.agent_projects` — the project scopes (project-scoped tables: facts, objectives, …).
  *  - `memos.agent_identity` — the full identity set {agent.x, team.x, org, project.*}, for the
  *    identity-targeted `briefs` policy (Phase 6 / ADR-006).
- * `identity` defaults to `scopes` so every existing caller keeps working unchanged.
+ *  - `memos.org_id` — the principal's org, for the control-plane org policy on users/memberships
+ *    (Phase 11 / ADR-009).
+ * `identity` defaults to `scopes` and `orgId` to null so existing callers keep working unchanged.
  */
 export function makeWithScope(
   db: GatewayDb,
   scopes: string[],
   identity: string[] = scopes,
+  orgId: string | null = null,
 ): WithScope {
   const projectsLiteral = toPgArrayLiteral(scopes);
   const identityLiteral = toPgArrayLiteral(identity);
+  // Scalar org id for the control-plane org policy (users/memberships). '' when absent → the
+  // policy's nullif(...,'') maps it to NULL → deny (same default-deny posture as the array GUCs).
+  const org = orgId ?? "";
   return function withScope<T>(fn: (tx: ScopedTx) => Promise<T>): Promise<T> {
     return db.transaction(async (tx) => {
       await tx.execute(
         sql`select set_config('memos.agent_projects', ${projectsLiteral}, true),
-                   set_config('memos.agent_identity', ${identityLiteral}, true)`,
+                   set_config('memos.agent_identity', ${identityLiteral}, true),
+                   set_config('memos.org_id', ${org}, true)`,
       );
       return fn(tx);
     });

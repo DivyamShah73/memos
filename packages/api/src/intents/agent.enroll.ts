@@ -51,17 +51,22 @@ export async function enroll(ctx: IntentContext, input: EnrollInput): Promise<En
           .update(enrollmentCodes)
           .set({ usedBy: agentId, usedAt: sql`now()` })
           .where(and(eq(enrollmentCodes.code, code), isNull(enrollmentCodes.usedBy)))
-          .returning({ teamId: enrollmentCodes.teamId, scopes: enrollmentCodes.scopes });
+          .returning({
+            teamId: enrollmentCodes.teamId,
+            orgId: enrollmentCodes.orgId,
+            scopes: enrollmentCodes.scopes,
+          });
 
         if (claimed.length === 0) return { raced: true as const };
 
-        const { teamId, scopes } = claimed[0];
+        const { teamId, orgId, scopes } = claimed[0];
         const scopeList = scopes ?? [];
         await tx.insert(agents).values({
           id: agentId,
           displayName: display_name,
           apiTokenHash: tokenHash,
           teamId,
+          orgId, // inherit the code's org so the new agent is org-bound (ADR-009)
           scopes: scopeList,
         });
         return { raced: false as const, scopes: scopeList };

@@ -6,13 +6,13 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { agents, teams } from "../db/schema.js";
+import { agents } from "../db/schema.js";
 import type { GatewayDb } from "../db/gateway.js";
 
 export interface AuthedAgent {
   id: string;
   teamId: string | null;
-  /** Org owning the agent's team — resolved via teams. Used to target org-level briefs (Phase 6). */
+  /** Org owning the agent (denormalized onto agents in Phase 11/ADR-009). Drives the org GUC. */
   orgId: string | null;
   scopes: string[];
   trustScore: string;
@@ -44,16 +44,18 @@ export async function resolveAgent(
   raw: string,
 ): Promise<AuthedAgent | null> {
   const hash = hashToken(raw);
+  // org_id is read straight off the agents row (denormalized) — no teams join. This is what lets
+  // teams/control-plane tables be org-RLS'd without deadlocking auth (ADR-009): the lookup is a
+  // single by-token-hash read on a table that is NOT org-RLS'd.
   const rows = await db
     .select({
       id: agents.id,
       teamId: agents.teamId,
-      orgId: teams.orgId,
+      orgId: agents.orgId,
       scopes: agents.scopes,
       trustScore: agents.trustScore,
     })
     .from(agents)
-    .leftJoin(teams, eq(agents.teamId, teams.id))
     .where(and(eq(agents.apiTokenHash, hash), eq(agents.status, "active")))
     .limit(1);
   const a = rows[0];

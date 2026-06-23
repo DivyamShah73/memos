@@ -66,7 +66,7 @@ export async function seedBase(): Promise<void> {
 export async function seedProject(id: string, okrsRequired = false): Promise<void> {
   await ownerDb
     .insert(projects)
-    .values({ id, teamId: TEST_TEAM, name: id, okrsRequired })
+    .values({ id, teamId: TEST_TEAM, orgId: TEST_ORG, name: id, okrsRequired })
     .onConflictDoNothing();
 }
 
@@ -246,7 +246,7 @@ export async function seedLearning(
 /** Mint a single-use code for the given scopes, enroll, and return the raw token. */
 export async function enrollAgent(scopes: string[], displayName: string): Promise<string> {
   const code = `enr_code_vitest_${randomBytes(6).toString("hex")}`;
-  await ownerDb.insert(enrollmentCodes).values({ code, teamId: TEST_TEAM, scopes });
+  await ownerDb.insert(enrollmentCodes).values({ code, teamId: TEST_TEAM, orgId: TEST_ORG, scopes });
   const { json } = await call("agent.enroll", null, { code, display_name: displayName });
   return json.data.api_token.raw as string;
 }

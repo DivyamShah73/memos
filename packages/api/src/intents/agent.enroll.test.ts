@@ -19,7 +19,7 @@ function uniqueCode(): string {
 }
 
 async function seedCode(code: string): Promise<void> {
-  await ownerDb.insert(enrollmentCodes).values({ code, teamId: TEAM_ID, scopes: TEST_SCOPES });
+  await ownerDb.insert(enrollmentCodes).values({ code, teamId: TEAM_ID, orgId: ORG_ID, scopes: TEST_SCOPES });
 }
 
 interface EnrollResult {

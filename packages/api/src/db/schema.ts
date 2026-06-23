@@ -62,6 +62,11 @@ export const projects = pgTable("projects", {
   id: text("id").primaryKey(), // 'project.<slug>' — public, used in every agent call
   uuid: uuid("uuid").defaultRandom().notNull().unique(),
   teamId: text("team_id").references(() => teams.id),
+  // Denormalized org owner (Phase 11). Lets multi-org isolation + the auth-bootstrap org
+  // resolution key on a single row without a teams join. Backfilled from team→org in 0008.
+  orgId: text("org_id")
+    .notNull()
+    .references(() => orgs.id),
   name: text("name").notNull(),
   // If true, workflow.create REQUIRES a non-abandoned target_objective_id (Phase 2).
   okrsRequired: boolean("okrs_required").default(false).notNull(),
@@ -79,6 +84,11 @@ export const agents = pgTable(
     displayName: text("display_name").notNull(),
     apiTokenHash: text("api_token_hash").notNull(), // store HASH only; raw syn_... shown once
     teamId: text("team_id").references(() => teams.id),
+    // Denormalized so resolveAgent gets the agent's org from a single by-token-hash row (no
+    // teams join), which is what lets control-plane tables be org-RLS'd without an auth deadlock.
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
     scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     trustScore: numeric("trust_score").notNull().default("0.5"), // 0..1
     status: text("status").notNull().default("active"), // active | revoked
@@ -96,6 +106,10 @@ export const agents = pgTable(
 export const enrollmentCodes = pgTable("enrollment_codes", {
   code: text("code").primaryKey(), // 'enr_code_...'; single-use, consumed on enroll
   teamId: text("team_id").references(() => teams.id),
+  // Denormalized so enroll stamps the new agent's org_id from the code row alone (no teams read).
+  orgId: text("org_id")
+    .notNull()
+    .references(() => orgs.id),
   scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   usedBy: text("used_by"), // agent id once redeemed
   usedAt: timestamp("used_at", { withTimezone: true }),
@@ -405,4 +419,57 @@ export const choices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [check("choices_status_check", sql`${t.status} in ('open','resolved')`)],
+);
+
+/* ===================================================================== *
+ * 7. Human identity: users + memberships (Phase 11, ADR-009)
+ *
+ * People (humans who supervise via the dashboard) are distinct from agents (AI principals
+ * that read/write memory via tokens). Both are org-bounded. A user's role+scope come from
+ * `memberships` ((user, scope_kind, scope_id) → role); a user can be e.g. manager of one team
+ * and member of a project in another. users + memberships carry org_id and are org-RLS'd
+ * (memos.org_id GUC) — the new DB-enforced isolation: org B can never read org A's people.
+ * ===================================================================== */
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(), // scrypt (low-entropy secret), NOT sha256
+    displayName: text("display_name").notNull(),
+    status: text("status").notNull().default("active"), // active | disabled
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("users_email_idx").on(sql`lower(${t.email})`), // case-insensitive unique login
+    index("users_org_idx").on(t.orgId),
+    check("users_status_check", sql`${t.status} in ('active','disabled')`),
+  ],
+);
+
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    scopeKind: text("scope_kind").notNull(), // org | team | project
+    scopeId: text("scope_id").notNull(), // 'org' | 'team.x' | 'project.x'
+    role: text("role").notNull(), // ceo | manager | member (capability enforcement: Phase 12)
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("memberships_unique_idx").on(t.userId, t.scopeKind, t.scopeId),
+    index("memberships_org_idx").on(t.orgId),
+    check("memberships_scope_kind_check", sql`${t.scopeKind} in ('org','team','project')`),
+    check("memberships_role_check", sql`${t.role} in ('ceo','manager','member')`),
+  ],
 );
