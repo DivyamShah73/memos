@@ -16,6 +16,7 @@ import { db, queryClient } from "./index.js";
 import {
   agents,
   artifacts,
+  briefs,
   checkins,
   facts,
   learnings,
@@ -38,6 +39,7 @@ const F = (n: number) => `c0000000-0000-4000-8000-00000000000${n}`;
 const L = (n: number) => `d0000000-0000-4000-8000-00000000000${n}`;
 const C = (n: number) => `e0000000-0000-4000-8000-00000000000${n}`;
 const A = (n: number) => `f0000000-0000-4000-8000-00000000000${n}`;
+const BR = (n: number) => `f1000000-0000-4000-8000-00000000000${n}`;
 const dummyHash = (id: string) => createHash("sha256").update(`seed:${id}`).digest("hex");
 
 async function run(): Promise<void> {
@@ -84,6 +86,8 @@ async function run(): Promise<void> {
       { id: O(1), projectId: "project.demo", bdId: BD, agentId: "agent.operator", title: "Cut inference cost 30%", status: "active" },
       { id: O(2), projectId: "project.demo", parentId: O(1), weight: "2", bdId: BD, title: "Ship vLLM continuous batching", status: "active" },
       { id: O(3), projectId: "project.demo", parentId: O(1), weight: "1", bdId: BD, title: "Cache embeddings", status: "active" },
+      // A second top-level objective for a fuller tree.
+      { id: O(4), projectId: "project.demo", bdId: BD, agentId: "agent.operator", title: "Reach 95% eval coverage", status: "active" },
     ])
     .onConflictDoNothing();
 
@@ -92,6 +96,7 @@ async function run(): Promise<void> {
     .values([
       { id: M(1), objectiveId: O(2), projectId: "project.demo", title: "p95 latency <= 200ms", metricTarget: "200", metricCurrent: "320", metricUnit: "ms", metricDirection: "down", status: "pending" },
       { id: M(2), objectiveId: O(3), projectId: "project.demo", title: "cache hit rate >= 90%", metricTarget: "90", metricCurrent: "45", metricUnit: "percent", metricDirection: "up", status: "pending" },
+      { id: M(3), objectiveId: O(4), projectId: "project.demo", title: "eval coverage >= 95%", metricTarget: "95", metricCurrent: "78", metricUnit: "percent", metricDirection: "up", status: "pending" },
     ])
     .onConflictDoNothing();
 
@@ -103,7 +108,20 @@ async function run(): Promise<void> {
     .onConflictDoNothing();
   await db
     .insert(artifacts)
-    .values({ id: A(1), projectId: "project.demo", bdId: BD2, kind: "benchmark", bucketPath: "project.demo/seed-benchmark", sizeBytes: 2048, sha256: "0".repeat(64) })
+    .values([
+      { id: A(1), projectId: "project.demo", bdId: BD2, kind: "benchmark", bucketPath: "project.demo/seed-benchmark", sizeBytes: 2048, sha256: "0".repeat(64) },
+      { id: A(2), projectId: "project.demo", bdId: BD2, kind: "query_result", bucketPath: "project.demo/seed-evalrun", sizeBytes: 4096, sha256: "1".repeat(64) },
+    ])
+    .onConflictDoNothing();
+
+  // Standing briefs the operator sees on the dashboard (targeting team/project/operator).
+  await db
+    .insert(briefs)
+    .values([
+      { id: BR(1), title: "Cite a benchmark for any latency claim", body: "Latency/throughput facts at medium+ confidence must attach a benchmark artifact.", targetKind: "team", targetId: "team.demo", authorId: "agent.operator" },
+      { id: BR(2), title: "Prefer vLLM over TGI for batching", body: "Standardize on vLLM continuous batching for this project's inference workloads.", targetKind: "project", targetId: "project.demo", authorId: "agent.operator" },
+      { id: BR(3), title: "Review the cost dashboard weekly", body: "Check inference cost per 1k tokens every Monday and log a fact if it moves >5%.", targetKind: "agent", targetId: "agent.operator", authorId: "agent.operator" },
+    ])
     .onConflictDoNothing();
 
   // Recent activity for the live feed.
@@ -112,6 +130,8 @@ async function run(): Promise<void> {
     .values([
       { id: F(1), projectId: "project.demo", bdId: BD, agentId: "agent.operator", claim: "vLLM batching cut p95 latency from 410ms to 320ms", confidence: "low" },
       { id: F(2), projectId: "project.demo", bdId: BD, agentId: "agent.operator", claim: "embedding cache hit rate measured at 45% after rollout", confidence: "low" },
+      { id: F(3), projectId: "project.demo", bdId: BD2, agentId: "agent.scout", claim: "throughput plateaus past batch size 48 on the A100", confidence: "low" },
+      { id: F(4), projectId: "project.demo", bdId: BD, agentId: "agent.builder", claim: "eval harness flaky on 3 of 220 cases (timeout)", confidence: "low" },
     ])
     .onConflictDoNothing();
   await db
@@ -122,11 +142,17 @@ async function run(): Promise<void> {
       { id: L(2), projectId: "project.demo", bdId: BD2, agentId: "agent.scout", claim: "batch size 32 is the latency/throughput knee for this model", appliesTo: ["vllm-deployment", "latency"], confidence: "medium", nonObviousMarker: "counterintuitive: larger batches past 32 regress p95", evidenceArtifactId: A(1), reuseSuccessCount: 5 },
       { id: L(3), projectId: "project.demo", bdId: BD, agentId: "agent.builder", claim: "warmup requests remove first-call cold start", appliesTo: ["vllm-deployment"], confidence: "low", reuseSuccessCount: 2 },
       { id: L(4), projectId: "project.demo", bdId: BD, agentId: "agent.novice", claim: "logging every token is too verbose for prod", appliesTo: ["observability"], confidence: "low", reuseSuccessCount: 0 },
+      // A second evidence-backed learning for provenance depth.
+      { id: L(5), projectId: "project.demo", bdId: BD2, agentId: "agent.scout", claim: "speculative decoding adds 1.4x throughput at batch 16", appliesTo: ["vllm-deployment", "throughput"], confidence: "medium", nonObviousMarker: "gains shrink sharply as batch size grows", evidenceArtifactId: A(2), reuseSuccessCount: 3 },
     ])
     .onConflictDoNothing();
   await db
     .insert(checkins)
-    .values([{ id: C(1), bdId: BD, projectId: "project.demo", status: "progress", currentTask: "profiling batch sizes" }])
+    .values([
+      { id: C(1), bdId: BD, projectId: "project.demo", status: "progress", currentTask: "profiling batch sizes" },
+      { id: C(2), bdId: BD2, projectId: "project.demo", status: "complete", currentTask: "benchmark complete" },
+      { id: C(3), bdId: BD, projectId: "project.demo", status: "blocked", currentTask: "waiting on GPU quota" },
+    ])
     .onConflictDoNothing();
 
   console.log(`db:seed — demo data ready (project.demo). Operator token: ${OPERATOR_TOKEN}`);

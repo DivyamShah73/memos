@@ -18,4 +18,5 @@ bash testing/phase5.sh   # okrs (goals + rollups)
 bash testing/phase6.sh   # briefs + questions + governance critic
 bash testing/phase7.sh   # dashboard read surface + live SSE stream
 bash testing/phase8.sh   # provenance trace + brief authoring + trust leaderboard
+bash testing/phase9.sh   # SDK-driven full e2e + invariant proofs
 echo "=== ALL PHASES GREEN ==="
