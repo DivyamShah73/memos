@@ -10,7 +10,7 @@ import { ZodError } from "zod";
 import { registry } from "./registry.js";
 import { ERROR_TYPE, fail, statusFor, type Envelope } from "./envelope.js";
 import { extractBearer, resolveAgent, type AuthedAgent } from "./auth.js";
-import { authorize, type Role } from "./authz.js";
+import { authorize } from "./authz.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { makeWithScope } from "./scope.js";
 import type { IntentContext } from "./context.js";
@@ -80,7 +80,7 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
     // capability matrix lives in authz.ts; CEO is read-only, steering needs manager. Public intents
     // (agent === null) skip this — agent.enroll has no principal.
     if (agent) {
-      const az = authorize(input.name, (agent.role ?? "member") as Role);
+      const az = authorize(input.name, agent.role);
       if (!az.allowed) return done(fail(az.reason ?? "forbidden", ERROR_TYPE.forbidden));
     }
 

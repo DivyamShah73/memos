@@ -45,8 +45,12 @@ export interface AuthzResult {
   reason?: string;
 }
 
-/** Decide whether `role` may call `intent`. Pure + table-driven so the matrix is easy to audit/test. */
-export function authorize(intent: string, role: Role): AuthzResult {
+/** Decide whether `role` may call `intent`. Pure + table-driven so the matrix is easy to audit/test.
+ * Accepts a raw string and normalizes any unrecognized value to the least-privileged `member`
+ * (defense-in-depth — the DB CHECK already constrains the column, but an elevated capability must
+ * never come from an unvalidated string). */
+export function authorize(intent: string, rawRole: string): AuthzResult {
+  const role: Role = rawRole === "manager" || rawRole === "ceo" ? rawRole : "member";
   const isWrite = WRITE_INTENTS.has(intent);
   const needsManager = MANAGER_INTENTS.has(intent);
 
