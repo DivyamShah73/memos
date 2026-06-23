@@ -4,7 +4,8 @@ import { test, expect } from "@playwright/test";
 
 async function login(page: import("@playwright/test").Page) {
   await page.goto("/login");
-  await page.fill('input[name="password"]', "memos");
+  await page.fill('input[name="email"]', "ceo@acme.test");
+  await page.fill('input[name="password"]', "demo-ceo-pass");
   await page.click('button[type="submit"]');
   await page.waitForURL("http://localhost:3000/");
 }

@@ -12,7 +12,8 @@ test("capture dashboard screenshots", async ({ page }) => {
   await page.waitForTimeout(400);
   await page.screenshot({ path: "../../docs/screenshots/login.png" });
 
-  await page.fill('input[name="password"]', "memos");
+  await page.fill('input[name="email"]', "ceo@acme.test");
+  await page.fill('input[name="password"]', "demo-ceo-pass");
   await page.click('button[type="submit"]');
   await page.waitForURL("http://localhost:3000/");
   await page.waitForTimeout(900);

@@ -491,3 +491,27 @@ from one mis-named fixture). Renamed to `vitest-authz-*`; clean.
 Gate green: `pnpm typecheck` clean; **125** API tests (7 new — the role matrix, pure + through
 dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase12.sh` proves the
 member/manager/ceo guard over HTTP; **`smoke_all.sh` 0–12 all green**.
+
+---
+
+## 2026-06-24 — Phase 13: per-user dashboard & user-principal auth (autonomous)
+
+The dashboard becomes multi-user. **ADR-011**: humans authenticate with a **session bearer token**
+that resolves to the *same* `AuthedAgent` principal shape as an agent — so the whole dispatch
+pipeline (org/project GUC, the Phase-12 authz guard) is unchanged. New public **`user.login`** intent
+verifies email+password (scrypt), mints a 256-bit token, stores its SHA-256 hash on
+`users.session_token_hash` (migration 0010), and returns `{api_token, role, projects, …}`. Gateway
+auth now tries `resolveAgent` then falls back to `resolveUserPrincipal` (users by token hash, owner
+connection — a by-credential lookup before the org GUC exists). A user's effective role = highest
+membership (ceo>manager>member); scope = `resolveUserScope.projects`.
+
+Web: the signed httpOnly session cookie now carries the user token (not `operator:<ts>`); `callIntent`
++ the SSE proxy call the gateway AS that user (retiring the shared `MEMOS_OPERATOR_TOKEN` / ADR-007);
+`getProjectId()` became async (selected-project cookie → else the user's first scope), so the pages
+that read it now `await` it; a **ProjectSwitcher** lists the user's projects (a CEO's is the whole
+org); login takes email+password; added sign-out. Seed adds an Acme manager + member user so all
+three role-views are demoable; Playwright login helpers updated to email/password.
+
+Gate green: `pnpm typecheck` (4 workspaces) clean; **130** API tests (5 new — login + user-principal
+role gating through dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase13.sh`
+proves per-user login + scoping over HTTP; **`smoke_all.sh` 0–13 all green**.
