@@ -6,6 +6,7 @@ export const MEMOS_SHARED_VERSION = "0.0.0";
 
 export * from "./schemas/agent.enroll.js";
 export * from "./schemas/user.login.js";
+export * from "./schemas/admin.js";
 export * from "./schemas/workflow.create.js";
 export * from "./schemas/checkin.js";
 export * from "./schemas/artifact.upload.js";

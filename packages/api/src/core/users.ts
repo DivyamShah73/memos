@@ -10,8 +10,24 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db as ownerDb } from "../db/index.js";
-import { memberships, orgs, projects, teams, users } from "../db/schema.js";
+import { auditLog, memberships, orgs, projects, teams, users } from "../db/schema.js";
 import { generateToken, hashToken, type AuthedAgent } from "./auth.js";
+
+/** Append an audit record (Phase 14). Owner connection so it works for public org.signup (no org
+ * GUC) and never fails the action it records — best-effort (a logging failure must not 500 a write). */
+export async function recordAudit(
+  orgId: string,
+  actorId: string | null,
+  action: string,
+  target?: string | null,
+  detail?: unknown,
+): Promise<void> {
+  try {
+    await ownerDb.insert(auditLog).values({ orgId, actorId: actorId ?? null, action, target: target ?? null, detail: detail ?? null });
+  } catch (err) {
+    console.error("audit record failed:", err);
+  }
+}
 
 // scrypt params: N=16384 (2^14) is a sensible interactive cost; login is rare so the sync call is fine.
 const SCRYPT = { N: 16384, r: 8, p: 1 } as const;

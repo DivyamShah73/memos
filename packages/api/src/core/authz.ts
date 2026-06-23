@@ -32,12 +32,25 @@ const WRITE_INTENTS = new Set<string>([
   "question.answer",
 ]);
 
-/** Steering/admin intents — require `manager` or above. */
+/** Steering intents (author project CONTENT) — require `manager` (and CEO is read-only, so denied). */
 const MANAGER_INTENTS = new Set<string>([
   "objective.publish",
   "objective.update",
   "brief.create",
   "question.answer",
+]);
+
+/**
+ * Org ADMINISTRATION intents (Phase 14) — manage the org itself: members, agent codes, lifecycle.
+ * Allowed for `manager` OR `ceo`. These are deliberately NOT subject to the CEO read-only rule: the
+ * CEO administers the org (invites, offboards) even though it can't author project content. Members
+ * cannot administer.
+ */
+const ADMIN_INTENTS = new Set<string>([
+  "enrollment.create",
+  "user.invite",
+  "agent.revoke",
+  "member.offboard",
 ]);
 
 export interface AuthzResult {
@@ -51,10 +64,19 @@ export interface AuthzResult {
  * never come from an unvalidated string). */
 export function authorize(intent: string, rawRole: string): AuthzResult {
   const role: Role = rawRole === "manager" || rawRole === "ceo" ? rawRole : "member";
+
+  // Org administration takes precedence and is allowed for manager OR ceo (NOT read-only-blocked):
+  // the CEO runs the org even though it can't author project content.
+  if (ADMIN_INTENTS.has(intent)) {
+    return role === "manager" || role === "ceo"
+      ? { allowed: true }
+      : { allowed: false, reason: `intent ${intent} requires the manager or CEO role` };
+  }
+
   const isWrite = WRITE_INTENTS.has(intent);
   const needsManager = MANAGER_INTENTS.has(intent);
 
-  // CEO is strictly read-only: it may read anything in its (org-wide) scope but mutate nothing.
+  // CEO is read-only on CONTENT: it may read anything in its (org-wide) scope but mutate nothing.
   if (role === "ceo" && isWrite) {
     return { allowed: false, reason: "the CEO role is read-only" };
   }

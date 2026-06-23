@@ -487,3 +487,23 @@ export const memberships = pgTable(
     check("memberships_role_check", sql`${t.role} in ('ceo','manager','member')`),
   ],
 );
+
+/**
+ * Audit log (Phase 14) — append-only record of admin/steering actions for accountability. Org-RLS'd
+ * (memos.org_id GUC) like the other control-plane tables; written best-effort post-action.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    actorId: text("actor_id"), // the user/agent principal that performed the action
+    action: text("action").notNull(), // e.g. org.signup | enrollment.create | user.invite | member.offboard
+    target: text("target"), // affected entity id (a user, agent, project, …)
+    detail: jsonb("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("audit_log_org_created_idx").on(t.orgId, t.createdAt.desc())],
+);

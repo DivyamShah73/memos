@@ -78,6 +78,13 @@
       "when": 1782247014878,
       "tag": "0010_majestic_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782248718126,
+      "tag": "0011_thin_spectrum",
+      "breakpoints": true
     }
   ]
 }
