@@ -7,8 +7,9 @@
  * middleware does a cheap presence check via SESSION_COOKIE.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { SESSION_COOKIE } from "./session-cookie";
 
-export { SESSION_COOKIE } from "./session-cookie";
+export { SESSION_COOKIE };
 const SECRET = process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me";
 
 /** Sign `<base64url(token)>.<hmac>` so the value is tamper-evident. */
@@ -47,4 +48,21 @@ export function verifySession(cookie: string | undefined): boolean {
 export function cookieSecure(): boolean {
   if (process.env.COOKIE_INSECURE === "1") return false;
   return process.env.NODE_ENV === "production";
+}
+
+/** Minimal jar shape we write to (next/headers `cookies()`); kept loose to avoid a Next type import. */
+type CookieSetter = { set(name: string, value: string, opts: Record<string, unknown>): void };
+
+/**
+ * Sign `token` into the session cookie with the canonical attributes (httpOnly, sameSite, secure,
+ * 8h maxAge). Single source of truth for the login + signup flows — change the policy here once.
+ */
+export function setSessionCookie(jar: CookieSetter, token: string): void {
+  jar.set(SESSION_COOKIE, signSession(token), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieSecure(), // HTTPS-only in prod (review M1); test-only opt-out for e2e over http
+    path: "/",
+    maxAge: 60 * 60 * 8,
+  });
 }

@@ -17,12 +17,17 @@ export async function POST(req: Request) {
   if (!token) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as { project_id?: string; role?: string };
-  const res = await fetch(`${API_URL}/v1/intent/enrollment.create`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ project_id: body.project_id, role: body.role }),
-    cache: "no-store",
-  });
-  const json = await res.json();
-  return Response.json(json, { status: res.status });
+  try {
+    const res = await fetch(`${API_URL}/v1/intent/enrollment.create`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ project_id: body.project_id, role: body.role }),
+      cache: "no-store",
+    });
+    const json = await res.json().catch(() => null);
+    if (!json) return Response.json({ ok: false, error: "gateway returned a non-JSON response" }, { status: 502 });
+    return Response.json(json, { status: res.status });
+  } catch {
+    return Response.json({ ok: false, error: "could not reach the gateway" }, { status: 502 });
+  }
 }

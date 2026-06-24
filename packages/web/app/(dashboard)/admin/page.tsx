@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { callIntent, getUserProjects } from "@/lib/memos";
 import type { AgentContext } from "@/lib/types";
 import { MintCodeForm } from "@/components/mint-code-form";
-import { relativeTime } from "@/lib/utils";
+import { relativeTime, fieldClass as field, canAdmin } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,6 @@ interface AgentRow {
   last_checkin_at: string | null;
 }
 
-const field =
-  "w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-accent";
 const card = "rounded-xl border border-border bg-surface/70 p-4";
 
 export default async function AdminPage() {
@@ -37,7 +35,7 @@ export default async function AdminPage() {
   const role = me?.role;
 
   // Role gate (defense-in-depth — the API also denies non-admins via ADMIN_INTENTS).
-  if (role !== "manager" && role !== "ceo") {
+  if (!canAdmin(role)) {
     return (
       <div className={`${card} max-w-md`}>
         <h2 className="text-base font-semibold">Admin</h2>
@@ -66,6 +64,9 @@ export default async function AdminPage() {
     const scope_kind = String(formData.get("scope_kind") ?? "project");
     const scope_id = String(formData.get("scope_id") ?? "").trim();
     if (!email || password.length < 8 || !display_name || !scope_id) return;
+    // Defense-in-depth no-escalation: don't forward a role above the actor's rank even if a crafted
+    // POST bypasses the capped dropdown (the API enforces this too — this just keeps the UI honest).
+    if (!grantableRoles.includes(inviteRole)) return;
     try {
       await callIntent("user.invite", {
         email, password, display_name, role: inviteRole, scope_kind, scope_id,

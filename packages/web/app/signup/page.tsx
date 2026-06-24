@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { signSession, SESSION_COOKIE, cookieSecure } from "@/lib/session";
+import { setSessionCookie } from "@/lib/session";
 import { API_URL } from "@/lib/memos";
+import { fieldClass as field } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -34,19 +35,9 @@ export default async function SignupPage({
     });
     const json = (await res.json()) as { ok: boolean; data?: { api_token: { raw: string } } };
     if (!json.ok || !json.data) redirect("/signup?error=1");
-    const jar = await cookies();
-    jar.set(SESSION_COOKIE, signSession(json.data!.api_token.raw), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: cookieSecure(),
-      path: "/",
-      maxAge: 60 * 60 * 8,
-    });
+    setSessionCookie(await cookies(), json.data!.api_token.raw);
     redirect("/");
   }
-
-  const field =
-    "w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-accent";
 
   return (
     <main className="min-h-screen grid place-items-center px-4">

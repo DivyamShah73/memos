@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { GitBranch, Megaphone, Target, Trophy, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, canAdmin } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/", label: "Console", icon: Target },
@@ -15,8 +15,7 @@ const ITEMS = [
 export function SidebarNav({ role }: { role?: string }) {
   const pathname = usePathname();
   // Org administration is manager/CEO only (mirrors the API's ADMIN_INTENTS authz tier).
-  const canAdmin = role === "manager" || role === "ceo";
-  const items = canAdmin ? [...ITEMS, { href: "/admin", label: "Admin", icon: Users }] : ITEMS;
+  const items = canAdmin(role) ? [...ITEMS, { href: "/admin", label: "Admin", icon: Users }] : ITEMS;
   return (
     <nav className="space-y-1 text-sm">
       {items.map(({ href, label, icon: Icon }) => {

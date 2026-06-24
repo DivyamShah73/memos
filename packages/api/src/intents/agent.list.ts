@@ -13,21 +13,22 @@ import { agents } from "../db/schema.js";
 export async function agentList(ctx: IntentContext, _input: AgentListInput): Promise<Envelope> {
   const agent = ctx.agent;
   if (!agent) return fail("authentication required", ERROR_TYPE.unauthorized);
+  // A manager/CEO principal always carries an org; if it somehow doesn't, fail closed (don't silently
+  // return an empty list, which would mask the bug) — this also narrows orgId for the org-scope filter.
+  if (!agent.orgId) return fail("authentication required", ERROR_TYPE.unauthorized);
 
-  const rows = agent.orgId
-    ? await ctx.db
-        .select({
-          id: agents.id,
-          displayName: agents.displayName,
-          role: agents.role,
-          status: agents.status,
-          scopes: agents.scopes,
-          trustScore: agents.trustScore,
-          lastCheckinAt: agents.lastCheckinAt,
-        })
-        .from(agents)
-        .where(eq(agents.orgId, agent.orgId))
-    : [];
+  const rows = await ctx.db
+    .select({
+      id: agents.id,
+      displayName: agents.displayName,
+      role: agents.role,
+      status: agents.status,
+      scopes: agents.scopes,
+      trustScore: agents.trustScore,
+      lastCheckinAt: agents.lastCheckinAt,
+    })
+    .from(agents)
+    .where(eq(agents.orgId, agent.orgId));
 
   const list = rows.map((a) => ({
     agent_id: a.id,
