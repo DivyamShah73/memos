@@ -3,13 +3,13 @@ import type { LearningListItem, ProvEdge, ProvNode } from "@/lib/types";
 import { ProvenanceExplorer } from "@/components/provenance-explorer";
 
 export const dynamic = "force-dynamic";
-const PROJECT = getProjectId();
 
 export default async function ProvenancePage({
   searchParams,
 }: {
   searchParams: Promise<{ learning?: string }>;
 }) {
+  const PROJECT = await getProjectId();
   const { learning } = await searchParams;
   const list = await callIntent<{ learnings: LearningListItem[] }>("learning.list", {
     project_id: PROJECT,

@@ -12,6 +12,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { dispatch } from "./core/dispatch.js";
 import { ERROR_TYPE } from "./core/envelope.js";
 import { extractBearer, resolveAgent } from "./core/auth.js";
+import { resolveUserPrincipal } from "./core/users.js";
 import { subscribeActivity, type ActivityEvent } from "./core/events.js";
 import { gatewayDb } from "./db/gateway.js";
 
@@ -34,14 +35,15 @@ app.onError((err, c) => {
 app.get("/health", (c) => c.json({ ok: true, data: { status: "healthy" } }));
 
 // Live activity stream (Phase 7, SSE) — the dashboard feed's real-time tail. Authenticated by
-// bearer (the dashboard's Next.js server proxies this with the operator token, so the browser
-// EventSource never holds the token) and scoped to one project. Subscribes to the in-process
-// event bus; write handlers publish post-commit. See ADR-007.
+// bearer and scoped to one project. The dashboard's Next.js server proxies this with the logged-in
+// USER's session token (Phase 13), so the principal may be an agent OR a user — resolve both the
+// same way dispatch does (agent first, then user). The browser EventSource never holds the token.
+// Subscribes to the in-process event bus; write handlers publish post-commit. See ADR-007 / ADR-011.
 app.get("/v1/stream/activity", async (c) => {
   const unauthorized = { ok: false, error: "authentication required", detail: {}, error_type: ERROR_TYPE.unauthorized };
   const token = extractBearer(c.req.header("authorization"));
   if (!token) return c.json(unauthorized, 401);
-  const agent = await resolveAgent(gatewayDb, token);
+  const agent = (await resolveAgent(gatewayDb, token)) ?? (await resolveUserPrincipal(token));
   if (!agent) return c.json(unauthorized, 401);
 
   const projectId = c.req.query("project_id") ?? "";

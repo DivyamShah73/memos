@@ -5,9 +5,8 @@ import { ActivityFeed } from "@/components/activity-feed";
 
 export const dynamic = "force-dynamic";
 
-const PROJECT = getProjectId();
-
 export default async function DashboardPage() {
+  const PROJECT = await getProjectId();
   // Degrade gracefully: a gateway business-rule failure (envelope ok:false → thrown) should render
   // an empty dashboard, not Next's error boundary. The gateway stays the source of truth.
   const [okr, act] = await Promise.all([

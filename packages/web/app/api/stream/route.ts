@@ -4,24 +4,26 @@
  * leaves the server (ADR-007).
  */
 import { cookies } from "next/headers";
-import { API_URL, OPERATOR_TOKEN } from "@/lib/memos";
-import { verifySession, SESSION_COOKIE } from "@/lib/session";
+import { API_URL } from "@/lib/memos";
+import { readSession, SESSION_COOKIE } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  // The middleware only checks cookie presence (edge runtime). Verify the signed session here so
-  // a forged/absent cookie can't reach the operator-token-authenticated upstream stream.
+  // The middleware only checks cookie presence (edge runtime). Verify + extract the signed session
+  // token here, and open the upstream stream AS the logged-in user (Phase 13) — so the live feed is
+  // scoped by that user's role + projects, just like every other read.
   const jar = await cookies();
-  if (!verifySession(jar.get(SESSION_COOKIE)?.value)) {
+  const token = readSession(jar.get(SESSION_COOKIE)?.value);
+  if (!token) {
     return new Response("unauthorized", { status: 401 });
   }
 
   const projectId = new URL(req.url).searchParams.get("project_id") ?? "project.demo";
   const upstream = await fetch(
     `${API_URL}/v1/stream/activity?project_id=${encodeURIComponent(projectId)}`,
-    { headers: { authorization: `Bearer ${OPERATOR_TOKEN}` } },
+    { headers: { authorization: `Bearer ${token}` } },
   );
 
   if (!upstream.ok || !upstream.body) {

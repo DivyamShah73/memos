@@ -23,7 +23,7 @@ docker compose exec -T db psql -U postgres -d memos -v ON_ERROR_STOP=1 -q >/dev/
 insert into orgs (id, name) values ('org','Demo Org') on conflict (id) do nothing;
 insert into teams (id, org_id, name) values ('team.demo','org','Demo Team') on conflict (id) do nothing;
 insert into projects (id, team_id, org_id, name) values ('project.demo','team.demo','org','Demo Project') on conflict (id) do nothing;
-insert into enrollment_codes (code, team_id, org_id, scopes) values ('$CODE','team.demo','org','["project.demo"]'::jsonb);
+insert into enrollment_codes (code, team_id, org_id, role, scopes) values ('$CODE','team.demo','org','manager','["project.demo"]'::jsonb);
 SQL
 if [ $? -eq 0 ]; then pass "seeded enrollment code"; else fail "seed enrollment code"; fi
 

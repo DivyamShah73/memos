@@ -268,6 +268,22 @@ Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/
 
 *More intents are added per phase (feedback.submit, choice.log, … ) — see `docs/PHASED_BUILD_PLAN.md`.*
 
+## Multi-org, roles & self-serve admin (Phases 11–14)
+
+Humans are first-class principals alongside agents. **Roles** (ADR-010): `member` (contribute),
+`manager` (steer: OKRs/briefs + admin), `ceo` (read-only on content, but administers the org). The
+dispatch authz guard enforces a central matrix (`core/authz.ts`); cross-org isolation of people is
+DB-enforced (RLS on `users`/`memberships`, ADR-009).
+
+- **`user.login`** (public) — `{email, password}` → `{ api_token, user_id, org_id, display_name, role, projects }`. The dashboard stores the token and calls the gateway as that user (ADR-011).
+- **`org.signup`** (public) — `{org_name, email, password}` → creates an org + starter team/project + first CEO; returns a ready session token (ADR-012).
+- **`enrollment.create`** (manager/CEO) — `{project_id, role?}` → mints a single-use agent code for a project in the actor's scope.
+- **`user.invite`** (manager/CEO) — `{email, password, display_name, role, scope_kind, scope_id}` → creates a user + membership in the actor's org.
+- **`agent.revoke`** (manager/CEO) — `{agent_id}` → revokes an agent (token stops resolving).
+- **`member.offboard`** (manager/CEO) — `{user_id}` → disables login + kills the dashboard session.
+
+Every admin action verifies org ownership and writes an `audit_log` row.
+
 ## Deployment
 
 Running this gateway on free hosting (Neon + Render + Vercel) is documented step-by-step in

@@ -13,7 +13,7 @@ let token: string;
 beforeAll(async () => {
   await seedBase();
   await seedProject(A, false);
-  token = await enrollAgent([A], "vitest-qans");
+  token = await enrollAgent([A], "vitest-qans", "manager"); // question.answer is manager-gated (ADR-010)
 });
 
 afterAll(async () => {

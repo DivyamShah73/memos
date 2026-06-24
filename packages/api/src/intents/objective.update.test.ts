@@ -16,7 +16,7 @@ beforeAll(async () => {
   await seedBase();
   await seedProject(A, false);
   await seedProject(B, false);
-  token = await enrollAgent([A], "vitest-ou");
+  token = await enrollAgent([A], "vitest-ou", "manager"); // objective.update is manager-gated (ADR-010)
 });
 
 afterAll(async () => {

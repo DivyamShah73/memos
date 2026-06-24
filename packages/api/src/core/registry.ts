@@ -16,6 +16,12 @@ import {
   trustLeaderboardInputSchema,
   checkinInputSchema,
   enrollInputSchema,
+  userLoginInputSchema,
+  orgSignupInputSchema,
+  enrollmentCreateInputSchema,
+  userInviteInputSchema,
+  agentRevokeInputSchema,
+  memberOffboardInputSchema,
   factQueryInputSchema,
   factRecordInputSchema,
   keyResultUpdateInputSchema,
@@ -32,6 +38,8 @@ import {
 import type { IntentContext } from "./context.js";
 import type { Envelope } from "./envelope.js";
 import { enroll } from "../intents/agent.enroll.js";
+import { userLogin } from "../intents/user.login.js";
+import { orgSignup, enrollmentCreate, userInvite, agentRevoke, memberOffboard } from "../intents/admin.js";
 import { workflowCreate } from "../intents/workflow.create.js";
 import { checkin } from "../intents/checkin.js";
 import { artifactUpload } from "../intents/artifact.upload.js";
@@ -71,6 +79,54 @@ export const registry = new Map<string, IntentDef>([
       schema: enrollInputSchema,
       handler: enroll as IntentDef["handler"],
       requiresAuth: false,
+    },
+  ],
+  [
+    "user.login",
+    {
+      schema: userLoginInputSchema,
+      handler: userLogin as IntentDef["handler"],
+      requiresAuth: false, // public — exchanges email+password for a session token
+    },
+  ],
+  [
+    "org.signup",
+    {
+      schema: orgSignupInputSchema,
+      handler: orgSignup as IntentDef["handler"],
+      requiresAuth: false, // public — the product's front door (creates an org + its CEO)
+    },
+  ],
+  [
+    "enrollment.create",
+    {
+      schema: enrollmentCreateInputSchema,
+      handler: enrollmentCreate as IntentDef["handler"],
+      requiresAuth: true, // manager/CEO (authz matrix: ADMIN_INTENTS)
+    },
+  ],
+  [
+    "user.invite",
+    {
+      schema: userInviteInputSchema,
+      handler: userInvite as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "agent.revoke",
+    {
+      schema: agentRevokeInputSchema,
+      handler: agentRevoke as IntentDef["handler"],
+      requiresAuth: true,
+    },
+  ],
+  [
+    "member.offboard",
+    {
+      schema: memberOffboardInputSchema,
+      handler: memberOffboard as IntentDef["handler"],
+      requiresAuth: true,
     },
   ],
   [

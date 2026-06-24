@@ -10,6 +10,8 @@ import { ZodError } from "zod";
 import { registry } from "./registry.js";
 import { ERROR_TYPE, fail, statusFor, type Envelope } from "./envelope.js";
 import { extractBearer, resolveAgent, type AuthedAgent } from "./auth.js";
+import { authorize } from "./authz.js";
+import { resolveUserPrincipal } from "./users.js";
 import { checkRateLimit } from "./ratelimit.js";
 import { makeWithScope } from "./scope.js";
 import type { IntentContext } from "./context.js";
@@ -59,7 +61,10 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
     if (requiresAuth) {
       const bearer = extractBearer(input.authHeader);
       if (!bearer) return done(fail("missing bearer token", ERROR_TYPE.unauthorized));
-      agent = await resolveAgent(gatewayDb, bearer);
+      // A bearer is either an agent token (agents table, by hash) or a dashboard user-session token
+      // (users table, by hash). Both resolve to the same AuthedAgent principal shape so the rest of
+      // the pipeline (org/project GUC, authz guard) is uniform (Phase 13/ADR-011).
+      agent = (await resolveAgent(gatewayDb, bearer)) ?? (await resolveUserPrincipal(bearer));
       if (!agent) return done(fail("invalid or revoked token", ERROR_TYPE.unauthorized));
     }
 
@@ -74,6 +79,14 @@ export async function dispatch(input: DispatchInput): Promise<DispatchOutput> {
 
     // 3. Unknown intent (only reachable once authed, so it doesn't leak to anon callers).
     if (!entry) return done(fail(`unknown intent: ${input.name}`, ERROR_TYPE.notFound));
+
+    // 3.5 Authorization by role (Phase 12 / ADR-010) — after auth, before the handler. The role→
+    // capability matrix lives in authz.ts; CEO is read-only, steering needs manager. Public intents
+    // (agent === null) skip this — agent.enroll has no principal.
+    if (agent) {
+      const az = authorize(input.name, agent.role);
+      if (!az.allowed) return done(fail(az.reason ?? "forbidden", ERROR_TYPE.forbidden));
+    }
 
     // 4. Parse the JSON body (empty body is treated as {}; malformed is a 400, not a 500).
     let parsed: unknown;

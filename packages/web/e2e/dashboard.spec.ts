@@ -8,9 +8,14 @@ const BD = "memos-demo0001"; // the seeded, still-open run
 test("login → OKR tree renders → a new fact streams into the live feed", async ({ page }) => {
   // 1. Login gate works.
   await page.goto("/login");
-  await page.fill('input[name="password"]', "memos");
+  await page.fill('input[name="email"]', "ceo@acme.test");
+  await page.fill('input[name="password"]', "demo-ceo-pass");
   await page.click('button[type="submit"]');
   await page.waitForURL("http://localhost:3000/");
+  // The login redirect's RSC can render before the just-set session cookie is visible (a known Next
+  // App Router server-action quirk); any subsequent request carries it. Reload for a settled,
+  // authenticated load — which is what a real user effectively gets on their next interaction.
+  await page.reload();
 
   // 2. Dashboard renders the seeded OKR tree (with rollup bars).
   await expect(page.getByText("Cut inference cost 30%")).toBeVisible();

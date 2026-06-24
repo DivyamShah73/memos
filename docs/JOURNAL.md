@@ -463,3 +463,107 @@ Gate green: `pnpm typecheck` clean (4 workspaces); **118** API tests (7 new — 
 isolation + the unset-GUC default-deny + human auth/scope); `drizzle-kit generate` no-diff; web
 build clean; `testing/phase11.sh` proves cross-org isolation over the wire under `memos_app`;
 **`smoke_all.sh` 0–11 all green** — the agent loop + project isolation never regressed.
+
+---
+
+## 2026-06-24 — Phase 12: roles & authorization (autonomous)
+
+Isolation answered "what can you see"; this adds "what may you do". **ADR-010**: a `role` on the
+principal (member | manager | ceo, default member, inherited from the enrollment code; seeded
+operator = manager) + a **central capability matrix** in `core/authz.ts` (two sets + a pure
+`authorize(intent, role)`), enforced at the single dispatch choke point right after auth. Rules:
+**CEO is read-only** (every write denied, even though it outranks for reads), **steering needs
+manager** (objective.publish/update, brief.create, question.answer), everything else is member-level.
+Chose one auditable matrix module over per-intent flags scattered across 23 registry entries — it's a
+security surface, so it should be reviewable at a glance and unit-tested in isolation.
+
+Migration 0009 adds `agents.role` + `enrollment_codes.role` (drizzle-gen DDL + a hand `UPDATE` to
+elevate the demo operator). `resolveAgent` now returns `role`; `enroll` inherits it from the code.
+The behavioral change rippled: agent-driven flows that steer (4 test suites + several phase scripts +
+the SDK e2e) now need a `manager` code — updated accordingly (the role *restriction* is proven
+separately, not by those functional scripts).
+
+One self-inflicted snag, caught + fixed: the new authz test first named its agents `authz-*`, but
+`cleanupAndClose` only deletes `vitest-%` agents — so it orphaned agents under the test team, its
+team-delete FK'd, and every later suite's teardown then tripped on the orphans (an 18-suite cascade
+from one mis-named fixture). Renamed to `vitest-authz-*`; clean.
+
+Gate green: `pnpm typecheck` clean; **125** API tests (7 new — the role matrix, pure + through
+dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase12.sh` proves the
+member/manager/ceo guard over HTTP; **`smoke_all.sh` 0–12 all green**.
+
+---
+
+## 2026-06-24 — Phase 13: per-user dashboard & user-principal auth (autonomous)
+
+The dashboard becomes multi-user. **ADR-011**: humans authenticate with a **session bearer token**
+that resolves to the *same* `AuthedAgent` principal shape as an agent — so the whole dispatch
+pipeline (org/project GUC, the Phase-12 authz guard) is unchanged. New public **`user.login`** intent
+verifies email+password (scrypt), mints a 256-bit token, stores its SHA-256 hash on
+`users.session_token_hash` (migration 0010), and returns `{api_token, role, projects, …}`. Gateway
+auth now tries `resolveAgent` then falls back to `resolveUserPrincipal` (users by token hash, owner
+connection — a by-credential lookup before the org GUC exists). A user's effective role = highest
+membership (ceo>manager>member); scope = `resolveUserScope.projects`.
+
+Web: the signed httpOnly session cookie now carries the user token (not `operator:<ts>`); `callIntent`
++ the SSE proxy call the gateway AS that user (retiring the shared `MEMOS_OPERATOR_TOKEN` / ADR-007);
+`getProjectId()` became async (selected-project cookie → else the user's first scope), so the pages
+that read it now `await` it; a **ProjectSwitcher** lists the user's projects (a CEO's is the whole
+org); login takes email+password; added sign-out. Seed adds an Acme manager + member user so all
+three role-views are demoable; Playwright login helpers updated to email/password.
+
+Gate green: `pnpm typecheck` (4 workspaces) clean; **130** API tests (5 new — login + user-principal
+role gating through dispatch); `drizzle-kit generate` no-diff; web build clean; `testing/phase13.sh`
+proves per-user login + scoping over HTTP; **`smoke_all.sh` 0–13 all green**.
+
+---
+
+## 2026-06-24 — Phase 14: self-serve admin & lifecycle (autonomous, v2 complete)
+
+Onboarding stops needing SQL. **ADR-012**: five intents — public **`org.signup`** (creates an org +
+starter team/project + first CEO, returns a session token), **`enrollment.create`** (mint an agent
+code for a project in scope), **`user.invite`**, **`agent.revoke`**, **`member.offboard`** (disable
+login + null the session). A new **`ADMIN_INTENTS`** tier in the authz matrix: org administration is
+allowed for **manager OR ceo** and is *not* subject to the CEO read-only rule — the CEO runs the org
+even though it can't author project content (otherwise a fresh org's only member could do nothing).
+Every admin handler verifies the target belongs to the actor's org (no cross-org administration) and
+writes an **`audit_log`** entry (migration 0011, org-RLS'd; written via the owner connection so the
+public signup — which has no org GUC — still logs).
+
+Two snags, both caught + fixed: `phase14.sh` first ran against a **stale gateway** left on :8787 from
+manual testing (so the new intents 404'd) — killed it + re-ran fresh; and the script used **`UID`** as
+a variable, which is a bash readonly builtin — renamed to `IUSERID`.
+
+Gate green: `pnpm typecheck` (4 workspaces) clean; **134** API tests (4 new — the full signup → mint →
+enroll → invite → offboard → revoke loop + audit assertions); `drizzle-kit generate` no-diff; web
+build clean; `testing/phase14.sh` proves the zero-operator loop over HTTP; **`smoke_all.sh` 0–14 all
+green**. **v2 is functionally complete** — a multi-org, role-based, self-serve agentic-supervision
+product, all on free-tier, built across Phases 11–14 on branches for review.
+
+---
+
+## 2026-06-24 — Pre-merge verification of v2 (12–14): two gaps closed, one real bug fixed
+
+Before signing off "safe to merge without manual review," ran the two checks the phase gates had
+skipped. **(1) Fresh-from-scratch migration:** applied all 12 migrations + the seed to an *empty*
+`memos_fresh` DB (the exact path the prod container takes on first boot) — clean apply, correct
+structure (org-RLS on users/memberships/audit_log, project-RLS on facts/learnings, the v2 columns +
+grants), and the seed provisioned a working 2-org / 4-user / 4-agent system. So the merge →
+prod-auto-deploy migration path is de-risked.
+
+**(2) Dashboard in a real browser (Playwright):** never actually run after the Phase-13 UI rewrite —
+and it caught a **real Phase-13 regression**. User-principal auth was wired into the intent dispatch
+but **not** into the SSE route `/v1/stream/activity` (it only ran `resolveAgent`), so a logged-in
+human's live-activity feed 401'd — the feed was dead for every user. Fixed `app.ts` to fall back to
+`resolveUserPrincipal` exactly like dispatch; verified directly (a CEO token now streams a posted
+fact) and added `stream.test.ts` (the coverage hole that let it through — a user token on an
+out-of-scope project must 403, not 401). The other e2e reds were harness/test issues, not product
+bugs: the `Secure` session cookie (correct for HTTPS prod) can't round-trip on `http://localhost`, so
+added a clearly-scoped **test-only** `COOKIE_INSECURE` opt-out (`lib/session.ts`) and pointed the
+Playwright webServer at the *production build* (pre-compiled SSE) over it; the brief-authoring spec
+logged in as the read-only CEO (it now uses the seeded manager); and parallel specs sharing
+`ceo@acme.test` clobbered each other under the one-session-per-user model, so the suite runs
+`workers: 1`. e2e now **3 passed / 1 skipped, deterministic**.
+
+Re-gate after the fix: `pnpm typecheck` clean; **138** API tests green (+ the SSE regression);
+`smoke_all.sh` 0–14 re-run green. The SSE fix lands on `phase-14-admin` (the cumulative branch).

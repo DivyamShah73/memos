@@ -18,7 +18,7 @@ let targetAgentId: string;
 beforeAll(async () => {
   await seedBase();
   await seedProject(A, false);
-  operatorToken = await enrollAgent([A], "vitest-bc-op");
+  operatorToken = await enrollAgent([A], "vitest-bc-op", "manager"); // brief.create is manager-gated (ADR-010)
   targetToken = await enrollAgent([A], "vitest-bc-target");
   const [t] = await ownerDb.select({ id: agents.id }).from(agents).where(eq(agents.displayName, "vitest-bc-target"));
   targetAgentId = t.id;

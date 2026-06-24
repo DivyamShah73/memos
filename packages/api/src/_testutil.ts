@@ -243,10 +243,17 @@ export async function seedLearning(
   return row.id;
 }
 
-/** Mint a single-use code for the given scopes, enroll, and return the raw token. */
-export async function enrollAgent(scopes: string[], displayName: string): Promise<string> {
+/** Mint a single-use code for the given scopes, enroll, and return the raw token. `role` sets the
+ * enrolled agent's authz role (Phase 12) — pass "manager" for steering (OKRs/briefs) tests. */
+export async function enrollAgent(
+  scopes: string[],
+  displayName: string,
+  role: "member" | "manager" | "ceo" = "member",
+): Promise<string> {
   const code = `enr_code_vitest_${randomBytes(6).toString("hex")}`;
-  await ownerDb.insert(enrollmentCodes).values({ code, teamId: TEST_TEAM, orgId: TEST_ORG, scopes });
+  await ownerDb
+    .insert(enrollmentCodes)
+    .values({ code, teamId: TEST_TEAM, orgId: TEST_ORG, role, scopes });
   const { json } = await call("agent.enroll", null, { code, display_name: displayName });
   return json.data.api_token.raw as string;
 }

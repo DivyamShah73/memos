@@ -90,6 +90,9 @@ export const agents = pgTable(
       .notNull()
       .references(() => orgs.id),
     scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    // Authorization role (Phase 12 / ADR-010): member (contribute), manager (steer: OKRs/briefs),
+    // ceo (read-only org-wide). Inherited from the enrollment code; the dispatch guard enforces it.
+    role: text("role").notNull().default("member"),
     trustScore: numeric("trust_score").notNull().default("0.5"), // 0..1
     status: text("status").notNull().default("active"), // active | revoked
     lastCheckinAt: timestamp("last_checkin_at", { withTimezone: true }),
@@ -100,21 +103,28 @@ export const agents = pgTable(
     // so it must be indexed; unique because two agents can never share a token hash.
     uniqueIndex("agents_api_token_hash_idx").on(t.apiTokenHash),
     check("agents_status_check", sql`${t.status} in ('active','revoked')`),
+    check("agents_role_check", sql`${t.role} in ('member','manager','ceo')`),
   ],
 );
 
-export const enrollmentCodes = pgTable("enrollment_codes", {
-  code: text("code").primaryKey(), // 'enr_code_...'; single-use, consumed on enroll
-  teamId: text("team_id").references(() => teams.id),
-  // Denormalized so enroll stamps the new agent's org_id from the code row alone (no teams read).
-  orgId: text("org_id")
-    .notNull()
-    .references(() => orgs.id),
-  scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-  usedBy: text("used_by"), // agent id once redeemed
-  usedAt: timestamp("used_at", { withTimezone: true }),
-  createdAt: createdAt(),
-});
+export const enrollmentCodes = pgTable(
+  "enrollment_codes",
+  {
+    code: text("code").primaryKey(), // 'enr_code_...'; single-use, consumed on enroll
+    teamId: text("team_id").references(() => teams.id),
+    // Denormalized so enroll stamps the new agent's org_id from the code row alone (no teams read).
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    // Role the enrolled agent inherits (Phase 12). Managers mint manager/member codes (Phase 14).
+    role: text("role").notNull().default("member"),
+    usedBy: text("used_by"), // agent id once redeemed
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [check("enrollment_codes_role_check", sql`${t.role} in ('member','manager','ceo')`)],
+);
 
 /* ===================================================================== *
  * 3. Objectives (OKRs) + milestones (KR/milestone, one table two roles)
@@ -442,11 +452,15 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(), // scrypt (low-entropy secret), NOT sha256
     displayName: text("display_name").notNull(),
     status: text("status").notNull().default("active"), // active | disabled
+    // sha256 of the current dashboard-session bearer token (Phase 13). The token is a 256-bit
+    // random secret (like agent tokens), so SHA-256 by-hash lookup is correct (not a password KDF).
+    sessionTokenHash: text("session_token_hash"),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex("users_email_idx").on(sql`lower(${t.email})`), // case-insensitive unique login
     index("users_org_idx").on(t.orgId),
+    index("users_session_token_idx").on(t.sessionTokenHash), // by-token auth lookup
     check("users_status_check", sql`${t.status} in ('active','disabled')`),
   ],
 );
@@ -472,4 +486,24 @@ export const memberships = pgTable(
     check("memberships_scope_kind_check", sql`${t.scopeKind} in ('org','team','project')`),
     check("memberships_role_check", sql`${t.role} in ('ceo','manager','member')`),
   ],
+);
+
+/**
+ * Audit log (Phase 14) — append-only record of admin/steering actions for accountability. Org-RLS'd
+ * (memos.org_id GUC) like the other control-plane tables; written best-effort post-action.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    actorId: text("actor_id"), // the user/agent principal that performed the action
+    action: text("action").notNull(), // e.g. org.signup | enrollment.create | user.invite | member.offboard
+    target: text("target"), // affected entity id (a user, agent, project, …)
+    detail: jsonb("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("audit_log_org_created_idx").on(t.orgId, t.createdAt.desc())],
 );

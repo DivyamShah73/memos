@@ -64,6 +64,27 @@
       "when": 1782241738144,
       "tag": "0008_left_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782245226168,
+      "tag": "0009_curly_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782247014878,
+      "tag": "0010_majestic_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782248718126,
+      "tag": "0011_thin_spectrum",
+      "breakpoints": true
     }
   ]
 }
