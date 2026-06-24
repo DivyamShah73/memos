@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, GitBranch, Megaphone, Target, Trophy } from "lucide-react";
+import { GitBranch, Megaphone, Target, Trophy, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
@@ -12,11 +12,14 @@ const ITEMS = [
   { href: "/briefs", label: "Briefs", icon: Megaphone },
 ];
 
-export function SidebarNav() {
+export function SidebarNav({ role }: { role?: string }) {
   const pathname = usePathname();
+  // Org administration is manager/CEO only (mirrors the API's ADMIN_INTENTS authz tier).
+  const canAdmin = role === "manager" || role === "ceo";
+  const items = canAdmin ? [...ITEMS, { href: "/admin", label: "Admin", icon: Users }] : ITEMS;
   return (
     <nav className="space-y-1 text-sm">
-      {ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
@@ -32,10 +35,6 @@ export function SidebarNav() {
           </Link>
         );
       })}
-      <span className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted/60">
-        <Activity className="h-4 w-4" /> Members
-        <span className="ml-auto rounded bg-border px-1.5 py-0.5 text-[10px]">soon</span>
-      </span>
     </nav>
   );
 }

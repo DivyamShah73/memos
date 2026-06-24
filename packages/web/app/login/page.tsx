@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { signSession, SESSION_COOKIE, cookieSecure } from "@/lib/session";
@@ -72,6 +73,11 @@ export default async function LoginPage({
             <code className="font-mono text-fg/80"> demo-manager-pass</code>
           </p>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted">
+          New here?{" "}
+          <Link href="/signup" className="text-accent hover:underline">Create an organization</Link>
+        </p>
       </div>
     </main>
   );
