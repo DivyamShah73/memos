@@ -567,3 +567,27 @@ logged in as the read-only CEO (it now uses the seeded manager); and parallel sp
 
 Re-gate after the fix: `pnpm typecheck` clean; **138** API tests green (+ the SSE regression);
 `smoke_all.sh` 0–14 re-run green. The SSE fix lands on `phase-14-admin` (the cumulative branch).
+
+---
+
+## 2026-06-24 — Phase 15: self-serve admin & onboarding UI
+
+v2 was live but its admin was **API-only** — orgs born via curl, the sidebar said *"Members soon."*
+This phase makes administration a dashboard experience. **ADR-013.** The Phase-14 admin was also
+**write-only**, so two read intents were added (manager/CEO, in the `ADMIN_INTENTS` tier):
+**`member.list`** (org's users + memberships; reads org-RLS'd `users`/`memberships` through
+`withScope`, so isolation is DB-enforced) and **`agent.list`** (org's agents; `agents` has no RLS, so
+org-scoped by an in-handler `org_id` filter, mirroring `trust.leaderboard`). `agent.me` now also
+returns **`role`** so the UI can gate admin surfaces. On the web: a **public `/signup`** page (clones
+the login cookie flow; middleware treats it like `/login`), and a role-gated **`/admin`** page that
+lists members + agents and drives the Phase-14 writes — invite, offboard, revoke, and mint enrollment
+codes (the one-time code is shown + copied via a small `/api/admin/enroll` route handler + client
+component, since a server action can't return a value to render). The invite role dropdown caps at the
+actor's rank, matching the API's no-escalation rule; the sidebar's "Members soon" placeholder is now a
+real **Admin** link, shown only to manager/CEO.
+
+Gate: `pnpm typecheck` (4 workspaces) clean; **143** API tests (5 new — `member.list`/`agent.list` org
+isolation + role-gate + `agent.me` role); `testing/phase15.sh` proves the read side over HTTP and is
+chained into `smoke_all`; `admin.spec.ts` e2e covers signup → dashboard, the CEO admin loop (invite +
+mint), and the member role-gate; **`smoke_all.sh` 0–15 green**. No new migrations — the data model
+already supported it. On branch `phase-15-admin-ui` for review.

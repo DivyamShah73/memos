@@ -221,8 +221,8 @@ curl -s -X POST $API/v1/intent/brief.fetch -H "authorization: Bearer $TOK" -H 'c
 ### `agent.me` — the calling agent's identity + scopes
 - **Auth:** bearer.
 - **Input:** `{}`
-- **Returns:** `{ "agent_id": string, "scopes": string[], "team_id": string|null, "org_id": string|null }`
-- **Notes:** lets a client (the dashboard) discover which projects its token can see, without hardcoding.
+- **Returns:** `{ "agent_id": string, "scopes": string[], "team_id": string|null, "org_id": string|null, "role": "member"|"manager"|"ceo" }`
+- **Notes:** lets a client (the dashboard) discover which projects its token can see + its role (to gate admin surfaces), without hardcoding.
 
 ### `GET /v1/stream/activity` — live activity stream (SSE, not an intent)
 - **Auth:** `Authorization: Bearer …`; agent scoped to the `project_id` query param.
@@ -268,7 +268,7 @@ Run on demand from the `@memos/workers` package (the logic lives in `@memos/api/
 
 *More intents are added per phase (feedback.submit, choice.log, … ) — see `docs/PHASED_BUILD_PLAN.md`.*
 
-## Multi-org, roles & self-serve admin (Phases 11–14)
+## Multi-org, roles & self-serve admin (Phases 11–15)
 
 Humans are first-class principals alongside agents. **Roles** (ADR-010): `member` (contribute),
 `manager` (steer: OKRs/briefs + admin), `ceo` (read-only on content, but administers the org). The
@@ -281,8 +281,11 @@ DB-enforced (RLS on `users`/`memberships`, ADR-009).
 - **`user.invite`** (manager/CEO) — `{email, password, display_name, role, scope_kind, scope_id}` → creates a user + membership in the actor's org.
 - **`agent.revoke`** (manager/CEO) — `{agent_id}` → revokes an agent (token stops resolving).
 - **`member.offboard`** (manager/CEO) — `{user_id}` → disables login + kills the dashboard session.
+- **`member.list`** (manager/CEO) — `{}` → `{ members: [{ user_id, email, display_name, status, memberships: [{ role, scope_kind, scope_id }] }] }`. Org-isolated at the DB (RLS on `users`/`memberships`). (ADR-013)
+- **`agent.list`** (manager/CEO) — `{}` → `{ agents: [{ agent_id, display_name, role, status, scopes, trust_score, last_checkin_at }] }`. `agents` has no RLS, so org-scoped by an in-handler `org_id` filter. (ADR-013)
 
-Every admin action verifies org ownership and writes an `audit_log` row.
+Every admin write verifies org ownership and writes an `audit_log` row. The read intents (`member.list`,
+`agent.list`) power the dashboard **Admin** page; a public **`/signup`** page drives `org.signup` (ADR-013).
 
 ## Deployment
 
