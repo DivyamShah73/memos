@@ -24,4 +24,5 @@ bash testing/phase11.sh  # multi-org foundation: people org-isolated at the DB
 bash testing/phase12.sh  # roles & authorization: member/manager/ceo guard
 bash testing/phase13.sh  # per-user login & user-principal scoping
 bash testing/phase14.sh  # self-serve admin & lifecycle (signup → mint → enroll → invite → offboard)
+bash testing/phase15.sh  # admin read side (member.list / agent.list / agent.me role) over HTTP
 echo "=== ALL PHASES GREEN ==="
