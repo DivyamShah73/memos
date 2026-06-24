@@ -36,3 +36,15 @@ export function readSession(cookie: string | undefined): string | null {
 export function verifySession(cookie: string | undefined): boolean {
   return readSession(cookie) !== null;
 }
+
+/**
+ * Whether the session cookie carries the `Secure` flag. On by default in production so the token
+ * never rides plaintext (review M1) — Vercel/Render serve the dashboard over HTTPS, so this is right.
+ * `COOKIE_INSECURE=1` is a TEST-ONLY escape hatch: the e2e drives the *production build* over
+ * http://localhost, where a Secure cookie can't round-trip. NEVER set COOKIE_INSECURE in a deployed
+ * environment — it is unset on Vercel/Render, so production stays Secure.
+ */
+export function cookieSecure(): boolean {
+  if (process.env.COOKIE_INSECURE === "1") return false;
+  return process.env.NODE_ENV === "production";
+}

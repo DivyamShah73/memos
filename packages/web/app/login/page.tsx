@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { signSession, SESSION_COOKIE } from "@/lib/session";
+import { signSession, SESSION_COOKIE, cookieSecure } from "@/lib/session";
 import { API_URL } from "@/lib/memos";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ export default async function LoginPage({
     jar.set(SESSION_COOKIE, signSession(json.data!.api_token.raw), {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production", // HTTPS-only off localhost (review M1)
+      secure: cookieSecure(), // HTTPS-only in prod (review M1); test-only opt-out for e2e over http
       path: "/",
       maxAge: 60 * 60 * 8,
     });
