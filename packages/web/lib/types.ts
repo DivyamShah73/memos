@@ -37,6 +37,7 @@ export interface AgentContext {
   scopes: string[];
   team_id: string | null;
   org_id: string | null;
+  role: "member" | "manager" | "ceo";
 }
 
 export interface ProvNode {

@@ -35,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <span className="grid h-7 w-7 place-items-center rounded-md bg-accent/15 text-accent font-mono">M</span>
           MemOS
         </div>
-        <SidebarNav />
+        <SidebarNav role={ctx?.role} />
         <div className="mt-auto space-y-2">
           <div className="rounded-lg border border-border bg-bg/50 p-3 text-[11px] text-muted">
             <div className="text-fg/80">{ctx?.org_id ?? "org"}</div>

@@ -7,6 +7,8 @@ import type { ZodTypeAny } from "zod";
 import {
   activityRecentInputSchema,
   agentMeInputSchema,
+  memberListInputSchema,
+  agentListInputSchema,
   artifactUploadInputSchema,
   briefAckInputSchema,
   briefCreateInputSchema,
@@ -62,6 +64,8 @@ import { provenanceTrace } from "../intents/provenance.trace.js";
 import { learningList } from "../intents/learning.list.js";
 import { briefCreate } from "../intents/brief.create.js";
 import { trustLeaderboard } from "../intents/trust.leaderboard.js";
+import { memberList } from "../intents/member.list.js";
+import { agentList } from "../intents/agent.list.js";
 
 export interface IntentDef {
   schema: ZodTypeAny;
@@ -303,6 +307,22 @@ export const registry = new Map<string, IntentDef>([
       schema: trustLeaderboardInputSchema,
       handler: trustLeaderboard as IntentDef["handler"],
       requiresAuth: true,
+    },
+  ],
+  [
+    "member.list",
+    {
+      schema: memberListInputSchema,
+      handler: memberList as IntentDef["handler"],
+      requiresAuth: true, // manager/CEO (authz matrix: ADMIN_INTENTS)
+    },
+  ],
+  [
+    "agent.list",
+    {
+      schema: agentListInputSchema,
+      handler: agentList as IntentDef["handler"],
+      requiresAuth: true, // manager/CEO (authz matrix: ADMIN_INTENTS)
     },
   ],
 ]);
