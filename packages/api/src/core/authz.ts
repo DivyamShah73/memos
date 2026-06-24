@@ -51,6 +51,10 @@ const ADMIN_INTENTS = new Set<string>([
   "user.invite",
   "agent.revoke",
   "member.offboard",
+  // Admin READS (Phase 15) — listing the org's people/agents is manager/CEO-only (members can't
+  // enumerate the org). Same tier: allowed for manager OR ceo, not blocked by the read-only rule.
+  "member.list",
+  "agent.list",
 ]);
 
 export interface AuthzResult {

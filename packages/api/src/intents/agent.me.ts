@@ -15,5 +15,6 @@ export async function agentMe(ctx: IntentContext, _input: AgentMeInput): Promise
     scopes: agent.scopes,
     team_id: agent.teamId,
     org_id: agent.orgId,
+    role: agent.role, // Phase 15: lets the dashboard gate admin surfaces by role
   });
 }

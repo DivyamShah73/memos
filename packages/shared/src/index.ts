@@ -29,3 +29,5 @@ export * from "./schemas/provenance.trace.js";
 export * from "./schemas/learning.list.js";
 export * from "./schemas/brief.create.js";
 export * from "./schemas/trust.leaderboard.js";
+export * from "./schemas/member.list.js";
+export * from "./schemas/agent.list.js";
