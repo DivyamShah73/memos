@@ -539,3 +539,31 @@ enroll → invite → offboard → revoke loop + audit assertions); `drizzle-kit
 build clean; `testing/phase14.sh` proves the zero-operator loop over HTTP; **`smoke_all.sh` 0–14 all
 green**. **v2 is functionally complete** — a multi-org, role-based, self-serve agentic-supervision
 product, all on free-tier, built across Phases 11–14 on branches for review.
+
+---
+
+## 2026-06-24 — Pre-merge verification of v2 (12–14): two gaps closed, one real bug fixed
+
+Before signing off "safe to merge without manual review," ran the two checks the phase gates had
+skipped. **(1) Fresh-from-scratch migration:** applied all 12 migrations + the seed to an *empty*
+`memos_fresh` DB (the exact path the prod container takes on first boot) — clean apply, correct
+structure (org-RLS on users/memberships/audit_log, project-RLS on facts/learnings, the v2 columns +
+grants), and the seed provisioned a working 2-org / 4-user / 4-agent system. So the merge →
+prod-auto-deploy migration path is de-risked.
+
+**(2) Dashboard in a real browser (Playwright):** never actually run after the Phase-13 UI rewrite —
+and it caught a **real Phase-13 regression**. User-principal auth was wired into the intent dispatch
+but **not** into the SSE route `/v1/stream/activity` (it only ran `resolveAgent`), so a logged-in
+human's live-activity feed 401'd — the feed was dead for every user. Fixed `app.ts` to fall back to
+`resolveUserPrincipal` exactly like dispatch; verified directly (a CEO token now streams a posted
+fact) and added `stream.test.ts` (the coverage hole that let it through — a user token on an
+out-of-scope project must 403, not 401). The other e2e reds were harness/test issues, not product
+bugs: the `Secure` session cookie (correct for HTTPS prod) can't round-trip on `http://localhost`, so
+added a clearly-scoped **test-only** `COOKIE_INSECURE` opt-out (`lib/session.ts`) and pointed the
+Playwright webServer at the *production build* (pre-compiled SSE) over it; the brief-authoring spec
+logged in as the read-only CEO (it now uses the seeded manager); and parallel specs sharing
+`ceo@acme.test` clobbered each other under the one-session-per-user model, so the suite runs
+`workers: 1`. e2e now **3 passed / 1 skipped, deterministic**.
+
+Re-gate after the fix: `pnpm typecheck` clean; **138** API tests green (+ the SSE regression);
+`smoke_all.sh` 0–14 re-run green. The SSE fix lands on `phase-14-admin` (the cumulative branch).
