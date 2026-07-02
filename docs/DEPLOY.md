@@ -130,7 +130,11 @@ without object storage. Configure a blob store only if you want the live `artifa
 | `MINIO_BUCKET` | bucket name (e.g. `memos-artifacts`) |
 | `MINIO_REGION` | region (e.g. `auto` for R2, `us-east-1` otherwise) |
 
-`services/blobstore.ts` uses path-style S3 and creates the bucket lazily on first upload.
+`services/blobstore.ts` uses path-style S3 and creates the bucket lazily on first upload. If it's
+**not** configured, `artifact.upload` returns a clear **HTTP 503** (`service_unavailable`, "artifact
+storage is unavailable or not configured") rather than an opaque 500 — so the cause is obvious. Every
+other intent is unaffected (facts/learnings at `confidence: low` need no evidence, so the write path
+still works without a blob store).
 
 ---
 
@@ -143,5 +147,5 @@ without object storage. Configure a blob store only if you want the live `artifa
 | Login fails | `DEMO_PASSWORD` / `SESSION_SECRET` not set on Vercel. |
 | Migrations error on `CREATE ROLE` | A provider that forbids role creation — create `memos_app` once in the SQL console, then redeploy. |
 | Feed not updating | Render woke from sleep (first event after idle lags), or the SSE proxy reconnected — refresh; it resumes. |
-| `artifact.upload` 500s | The optional blob store isn't configured (see above). Everything else is unaffected. |
+| `artifact.upload` returns 503 `service_unavailable` | The optional blob store isn't configured (see above) — set the `MINIO_*` env vars. Everything else is unaffected. |
 | Dashboard 401s after **changing** `MEMOS_OPERATOR_TOKEN` | The seed creates the operator agent with `onConflictDoNothing`, so a redeploy with a *new* token does **not** overwrite the stored hash. To rotate: update the `agent.operator` row's `api_token_hash` to `sha256(<new token>)` in Neon's SQL editor, then set the new token in both Render and Vercel. |

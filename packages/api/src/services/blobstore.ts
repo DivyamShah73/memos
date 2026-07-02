@@ -61,3 +61,39 @@ export async function getObject(key: string): Promise<Buffer> {
   const bytes = await res.Body.transformToByteArray();
   return Buffer.from(bytes);
 }
+
+/**
+ * True if `err` looks like the blob store being unreachable or misconfigured (rather than a
+ * per-request application error). Covers the common prod case: no MINIO_* env vars set, so the
+ * client falls back to localhost:9000 and the connection is refused. Also catches DNS/timeout
+ * failures against a real endpoint and credential/permission rejections from the store. Lets
+ * artifact.upload return a clear 503 ("storage unavailable/not configured") instead of an opaque
+ * 500 — the operator then knows to configure the store (see docs/DEPLOY.md), not debug the app.
+ */
+export function isBlobStoreUnavailable(err: unknown): boolean {
+  const e = err as { code?: string; name?: string; $metadata?: { httpStatusCode?: number } };
+  const code = e?.code ?? e?.name ?? "";
+  // Node/undici socket-level failures (no store listening, DNS/timeout).
+  if (
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "ETIMEDOUT" ||
+    code === "EHOSTUNREACH" ||
+    code === "ECONNRESET" ||
+    code === "EAI_AGAIN"
+  ) {
+    return true;
+  }
+  // AWS SDK infra/credential failures (bad endpoint, wrong keys, forbidden) — a config problem,
+  // not a client mistake we should surface as a 500.
+  if (
+    code === "TimeoutError" ||
+    code === "AccessDenied" ||
+    code === "InvalidAccessKeyId" ||
+    code === "SignatureDoesNotMatch"
+  ) {
+    return true;
+  }
+  const status = e?.$metadata?.httpStatusCode;
+  return status === 403 || (typeof status === "number" && status >= 500);
+}
