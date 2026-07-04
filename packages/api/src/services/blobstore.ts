@@ -23,6 +23,16 @@ const client = new S3Client({
     accessKeyId: process.env.MINIO_ROOT_USER ?? "minioadmin",
     secretAccessKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
   },
+  // AWS SDK v3 (since ~3.729) defaults to attaching x-amz-checksum-* request headers/trailers.
+  // Real S3 supports this, but several S3-COMPATIBLE stores (Cloudflare R2, some MinIO builds)
+  // reject it outright, and a rejection whose body isn't AWS's expected XML shape makes the SDK's
+  // parser throw an opaque error on top of the real one. Disabling request checksums restores the
+  // pre-3.729, universally-compatible behavior; our own sha256 (computed + stored in
+  // artifact.upload) already covers integrity, so this loses nothing. Defensive hardening only —
+  // it did not touch the underlying artifact.upload prod incident (root cause there was a wrong
+  // Supabase project-ref host in MINIO_ENDPOINT, fixed in the Render env config).
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 let bucketReady: Promise<void> | undefined;
