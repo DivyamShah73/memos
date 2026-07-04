@@ -10,6 +10,7 @@ export const ERROR_TYPE = {
   notFound: "not_found",
   rateLimited: "rate_limited",
   badRequest: "bad_request", // business-rule failure → HTTP 200 with ok:false
+  unavailable: "service_unavailable", // a dependency (e.g. blob store) is down/misconfigured → 503
   platform: "platform_error",
 } as const;
 
@@ -49,6 +50,8 @@ export function statusFor(env: Envelope): number {
       return 404;
     case "rate_limited":
       return 429;
+    case "service_unavailable":
+      return 503;
     case "platform_error":
       return 500;
     case "bad_request":

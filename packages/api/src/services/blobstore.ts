@@ -23,6 +23,16 @@ const client = new S3Client({
     accessKeyId: process.env.MINIO_ROOT_USER ?? "minioadmin",
     secretAccessKey: process.env.MINIO_ROOT_PASSWORD ?? "minioadmin",
   },
+  // AWS SDK v3 (since ~3.729) defaults to attaching x-amz-checksum-* request headers/trailers.
+  // Real S3 supports this, but several S3-COMPATIBLE stores (Cloudflare R2, some MinIO builds)
+  // reject it outright, and a rejection whose body isn't AWS's expected XML shape makes the SDK's
+  // parser throw an opaque error on top of the real one. Disabling request checksums restores the
+  // pre-3.729, universally-compatible behavior; our own sha256 (computed + stored in
+  // artifact.upload) already covers integrity, so this loses nothing. Defensive hardening only —
+  // it did not touch the underlying artifact.upload prod incident (root cause there was a wrong
+  // Supabase project-ref host in MINIO_ENDPOINT, fixed in the Render env config).
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 let bucketReady: Promise<void> | undefined;
@@ -60,4 +70,40 @@ export async function getObject(key: string): Promise<Buffer> {
   if (!res.Body) throw new Error(`blob store returned no body for key: ${key}`);
   const bytes = await res.Body.transformToByteArray();
   return Buffer.from(bytes);
+}
+
+/**
+ * True if `err` looks like the blob store being unreachable or misconfigured (rather than a
+ * per-request application error). Covers the common prod case: no MINIO_* env vars set, so the
+ * client falls back to localhost:9000 and the connection is refused. Also catches DNS/timeout
+ * failures against a real endpoint and credential/permission rejections from the store. Lets
+ * artifact.upload return a clear 503 ("storage unavailable/not configured") instead of an opaque
+ * 500 — the operator then knows to configure the store (see docs/DEPLOY.md), not debug the app.
+ */
+export function isBlobStoreUnavailable(err: unknown): boolean {
+  const e = err as { code?: string; name?: string; $metadata?: { httpStatusCode?: number } };
+  const code = e?.code ?? e?.name ?? "";
+  // Node/undici socket-level failures (no store listening, DNS/timeout).
+  if (
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "ETIMEDOUT" ||
+    code === "EHOSTUNREACH" ||
+    code === "ECONNRESET" ||
+    code === "EAI_AGAIN"
+  ) {
+    return true;
+  }
+  // AWS SDK infra/credential failures (bad endpoint, wrong keys, forbidden) — a config problem,
+  // not a client mistake we should surface as a 500.
+  if (
+    code === "TimeoutError" ||
+    code === "AccessDenied" ||
+    code === "InvalidAccessKeyId" ||
+    code === "SignatureDoesNotMatch"
+  ) {
+    return true;
+  }
+  const status = e?.$metadata?.httpStatusCode;
+  return status === 403 || (typeof status === "number" && status >= 500);
 }

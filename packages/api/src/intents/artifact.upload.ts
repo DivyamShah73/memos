@@ -14,7 +14,7 @@ import type { ArtifactUploadInput } from "@memos/shared";
 import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
-import { ensureBucket, putObject } from "../services/blobstore.js";
+import { ensureBucket, putObject, isBlobStoreUnavailable } from "../services/blobstore.js";
 import { assertRunWritable } from "./_evidence.js";
 import { artifacts } from "../db/schema.js";
 
@@ -50,9 +50,23 @@ export async function artifactUpload(
     const id = randomUUID();
     const bucketPath = `${project_id}/${id}`;
 
-    // 3. Blob first (outside any tx).
-    await ensureBucket();
-    await putObject(bucketPath, bytes, mime_type);
+    // 3. Blob first (outside any tx). If the store is unreachable/misconfigured (e.g. no MINIO_*
+    // env vars in prod → the client falls back to localhost → connection refused), return a clear
+    // 503 instead of an opaque 500 the caller has to reverse-engineer. The metadata row is not
+    // written, so there's no orphan; the operator configures the store (docs/DEPLOY.md) and retries.
+    try {
+      await ensureBucket();
+      await putObject(bucketPath, bytes, mime_type);
+    } catch (err) {
+      if (isBlobStoreUnavailable(err)) {
+        return fail(
+          "artifact storage is unavailable or not configured — cannot store evidence bytes",
+          ERROR_TYPE.unavailable,
+          { hint: "set the blob-store env vars (MINIO_*) on the server; see docs/DEPLOY.md" },
+        );
+      }
+      throw err;
+    }
 
     // 4. Then the metadata row (in scope).
     await withScope(async (tx) => {
