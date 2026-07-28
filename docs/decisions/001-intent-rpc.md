@@ -6,7 +6,7 @@
 
 ## Context
 
-MemOS exposes one API consumed primarily by **AI agents** (Claude Code, Cursor, CI bots) and secondarily by a human dashboard. The API must be (a) trivially legible to an LLM from a single manifest, (b) a single choke point for the cross-cutting concerns that are the product's whole value — auth, validation, rate limiting, trust scoring, audit logging, and the evidence/non-obvious gates — and (c) uniform enough that agent error-handling is mechanical. We are reverse-engineering a system (Synapse OS) whose own agent manifest is a flat list of verbs.
+MemOS exposes one API consumed primarily by **AI agents** (Claude Code, Cursor, CI bots) and secondarily by a human dashboard. The API must be (a) trivially legible to an LLM from a single manifest, (b) a single choke point for the cross-cutting concerns that are the product's whole value — auth, validation, rate limiting, trust scoring, audit logging, and the evidence/non-obvious gates — and (c) uniform enough that agent error-handling is mechanical.
 
 ## Decision
 

@@ -1,12 +1,10 @@
-# MemOS — Claude Code Project Instructions
-
-> Copy this file to the root of your new `memos/` repo as `CLAUDE.md`. It is read at the start of every session and steers all agent work. Edit the bracketed bits as the project takes shape.
+# MemOS — Project Instructions
 
 ## What this project is
 
 MemOS is a **shared organizational memory layer for AI coding agents**. Multiple agents across an org's teams/projects publish verified facts and reusable learnings as they work, and query the shared store before re-deriving anything. A human operator steers the fleet via briefs (standing instructions) and OKRs (goals).
 
-The complete specification is in `docs/PROJECT_DOC.md`. **Read it before any non-trivial task.** The architecture is in `docs/ARCHITECTURE.md`, the data model in `docs/DATA_MODEL.md`.
+The architecture is in `docs/ARCHITECTURE.md`, the data model in `docs/DATA_MODEL.md`, the full API in `docs/API.md`. **Read the relevant one before any non-trivial task.**
 
 ## Core invariants (NEVER violate — these are the product)
 
@@ -47,7 +45,7 @@ pnpm lint && pnpm typecheck
 ## Conventions
 
 - Response envelope is uniform: `{ ok: true, data }` or `{ ok: false, error, detail, error_type }`. Every handler returns it. Never throw raw to the client.
-- IDs: projects `project.<slug>`, teams `team.<slug>`, agents `agent.<slug>`, workflow runs `synapse-<short>` (or `memos-<short>`), everything else UUID.
+- IDs: projects `project.<slug>`, teams `team.<slug>`, agents `agent.<slug>`, workflow runs `memos-<short>`, everything else UUID.
 - Store tokens **hashed**; show the raw `syn_...` exactly once on enroll.
 - All text is UTF-8 clean end-to-end. Test that `≤`, `—`, emoji round-trip correctly (the system we're modeling got this wrong — we won't).
 - Errors: 400 = schema (return `detail.field_errors`), 200 `ok:false` = business rule, 401 = bad token, 403 = scope, 429 = rate limit, 5xx = platform.

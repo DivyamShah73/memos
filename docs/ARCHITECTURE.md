@@ -1,6 +1,6 @@
 # MemOS — Architecture (HLD)
 
-> Copy to `docs/ARCHITECTURE.md` in the new repo. This is the high-level design: components, data flow, the request lifecycle, scaling, and the cross-cutting concerns. Keep it current as the build progresses — it's the doc an interviewer reads first.
+> The high-level design: components, data flow, the request lifecycle, scaling, and the cross-cutting concerns.
 
 ---
 

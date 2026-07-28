@@ -1,6 +1,6 @@
 # MemOS — Data Model (LLD)
 
-> Copy to `docs/DATA_MODEL.md`. This is the low-level design: the ER diagram, every table with columns/indexes, the RLS strategy, the provenance graph, and the key query patterns. The canonical schema lives in code (`packages/api/src/db/schema.ts` via Drizzle); this doc explains the *why* and keeps the diagram.
+> The low-level design: the ER diagram, every table with columns/indexes, the RLS strategy, the provenance graph, and the key query patterns. The canonical schema lives in code (`packages/api/src/db/schema.ts` via Drizzle); this doc explains the *why* and keeps the diagram.
 
 ---
 

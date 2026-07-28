@@ -466,7 +466,7 @@ build clean; `testing/phase11.sh` proves cross-org isolation over the wire under
 
 ---
 
-## 2026-06-24 — Phase 12: roles & authorization (autonomous)
+## 2026-06-24 — Phase 12: roles & authorization
 
 Isolation answered "what can you see"; this adds "what may you do". **ADR-010**: a `role` on the
 principal (member | manager | ceo, default member, inherited from the enrollment code; seeded
@@ -494,7 +494,7 @@ member/manager/ceo guard over HTTP; **`smoke_all.sh` 0–12 all green**.
 
 ---
 
-## 2026-06-24 — Phase 13: per-user dashboard & user-principal auth (autonomous)
+## 2026-06-24 — Phase 13: per-user dashboard & user-principal auth
 
 The dashboard becomes multi-user. **ADR-011**: humans authenticate with a **session bearer token**
 that resolves to the *same* `AuthedAgent` principal shape as an agent — so the whole dispatch
@@ -518,7 +518,7 @@ proves per-user login + scoping over HTTP; **`smoke_all.sh` 0–13 all green**.
 
 ---
 
-## 2026-06-24 — Phase 14: self-serve admin & lifecycle (autonomous, v2 complete)
+## 2026-06-24 — Phase 14: self-serve admin & lifecycle (v2 complete)
 
 Onboarding stops needing SQL. **ADR-012**: five intents — public **`org.signup`** (creates an org +
 starter team/project + first CEO, returns a session token), **`enrollment.create`** (mint an agent

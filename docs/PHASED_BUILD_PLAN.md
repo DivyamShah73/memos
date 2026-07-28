@@ -8,12 +8,12 @@
 
 ## How to run this
 
-- Give Claude **one phase at a time**. Start each with: *"We're on Phase N. Read CLAUDE.md + docs/PROJECT_DOC.md. Plan Phase N, then build it. Write its tests AND a `testing/phaseN.sh` manual-test script."*
-- After build: run `pnpm test` (automated) → then run `bash testing/phaseN.sh` (manual) yourself → eyeball the output against the **Expect** column.
-- Only when both are green do you check the box and say "Phase N+1."
+- Work **one phase at a time**: plan it, build it, write its tests AND a `testing/phaseN.sh` manual-test script.
+- After build: run `pnpm test` (automated) → then run `bash testing/phaseN.sh` (manual) → eyeball the output against the **Expect** column.
+- Only when both are green does the next phase start.
 - Keep a running `testing/smoke_all.sh` that chains every phase script — re-run it after each phase to catch regressions in earlier phases.
 
-**Convention for manual tests:** every `phaseN.sh` prints a clear `PASS:`/`FAIL:` line per check so you're not parsing raw JSON. Have Claude build that in.
+**Convention for manual tests:** every `phaseN.sh` prints a clear `PASS:`/`FAIL:` line per check so raw JSON never needs parsing by hand.
 
 ---
 
