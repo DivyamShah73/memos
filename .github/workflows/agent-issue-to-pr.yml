@@ -63,6 +63,7 @@ jobs:
     permissions:
       contents: read # read the code to write a spec — never write it
       issues: write # post the spec/questions back as a comment
+      id-token: write
     outputs:
       decision: ${{ steps.decision.outputs.value }}
     steps:
@@ -115,6 +116,7 @@ jobs:
       contents: write # push the working branch
       pull-requests: write # open the PR
       issues: write # report back on the issue
+      id-token: write
     env:
       # Stricter than the local default: an unattended agent has nobody to talk it down.
       MEMOS_DIFF_BUDGET_LINES: "200"

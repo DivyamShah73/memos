@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # post the review comment
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
