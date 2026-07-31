@@ -127,7 +127,11 @@ jobs:
       MEMOS_DIFF_BUDGET_LINES: "200"
       MEMOS_DIFF_BUDGET_FILES: "10"
     steps:
+      # Full history: the gates below diff the branch against origin/<default>, and the default shallow
+      # clone (depth 1) has no such ref to compare against.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -226,14 +230,19 @@ jobs:
       # to prevent, so "did anything happen at all" is now the precondition for the rest.
       - name: Gate — agent produced changes
         run: |
+          # Measure the BRANCH against the base, not the worktree against HEAD. The agent commits as it
+          # works — one run finished five correct files across three commits and this gate still said
+          # "no changes", because HEAD had moved with it and the worktree was clean. Anything it left
+          # unstaged gets folded in first so nothing is lost either way.
           git add -A
-          if git diff --cached --quiet HEAD; then
-            echo "::error::The agent made no changes. Not running the remaining gates — they would" \
-                 "all pass against an unchanged tree and report a green build over no work." \
-                 "Check the Implement step output above for permission denials or a refusal."
+          git diff --cached --quiet || git commit -q -m "chore: uncommitted agent leftovers"
+          if git diff --quiet origin/${{ github.event.repository.default_branch }} HEAD; then
+            echo "::error::The agent made no changes. Skipping the remaining gates — they would all" \
+                 "pass against an unchanged tree and report a green build over no work." \
+                 "Check the Implement step output for permission denials or a refusal."
             exit 1
           fi
-          echo "Agent changed $(git diff --cached --name-only HEAD | wc -l | tr -d ' ') file(s)."
+          echo "Agent changed $(git diff --name-only origin/${{ github.event.repository.default_branch }} HEAD | wc -l | tr -d ' ') file(s)."
 
       - name: Gate — typecheck
         id: typecheck
@@ -254,25 +263,22 @@ jobs:
         id: budget
         continue-on-error: true
         run: |
-          # Reads the staged diff: the "agent produced changes" gate above already ran `git add -A`,
-          # which matters because `git diff` alone ignores untracked files — without staging, an agent
-          # that added one 800-line new file would score +0 and sail through the budget.
-          added=$(git diff --cached --numstat HEAD -- . | awk '{s+=$1} END {print s+0}')
-          files=$(git diff --cached --name-only HEAD -- . | wc -l | tr -d ' ')
+          # Branch vs base, for the same reason as the gate above. The previous step committed any
+          # leftovers, so everything the agent produced is in HEAD by now — which also means untracked
+          # files are counted, and an agent that added one 800-line file can't score +0.
+          base=origin/${{ github.event.repository.default_branch }}
+          added=$(git diff --numstat "$base" HEAD -- . | awk '{s+=$1} END {print s+0}')
+          files=$(git diff --name-only "$base" HEAD -- . | wc -l | tr -d ' ')
           echo "added=$added files=$files (budget ${MEMOS_DIFF_BUDGET_LINES}/${MEMOS_DIFF_BUDGET_FILES})"
           echo "added=$added" >> "$GITHUB_OUTPUT"
           echo "files=$files" >> "$GITHUB_OUTPUT"
           [ "$added" -le "$MEMOS_DIFF_BUDGET_LINES" ] && [ "$files" -le "$MEMOS_DIFF_BUDGET_FILES" ]
 
+      # The agent's own commits are already on the branch, and the "produced changes" gate folded in
+      # anything it left unstaged — so there is nothing left to commit here. Keeping its commit history
+      # is the better outcome anyway: a reviewer can read how it got there instead of one squashed blob.
       - name: Push branch
         run: |
-          git add -A
-          git diff --cached --quiet && { echo "Agent produced no changes — nothing to open."; exit 1; }
-          git commit -m "feat: address #${{ github.event.issue.number }}
-
-          Agent-authored. See PR body for gate results.
-
-          Refs #${{ github.event.issue.number }}"
           git push origin "${{ steps.branch.outputs.name }}"
 
       # Any red gate => draft. A draft PR is an honest signal that a human must look before this is
