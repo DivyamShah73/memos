@@ -1,5 +1,5 @@
 {
-  "$comment": "Copy to .claude/settings.json in the new memos repo. Pre-allows safe, repetitive dev commands so you avoid approval fatigue during the 3-4 day build, while keeping destructive ops gated. Tune to taste.",
+  "$comment": "Project harness config. `permissions` pre-allows safe, repetitive dev commands so approval fatigue doesn't set in, while keeping destructive ops gated. `hooks` is the enforcement layer — see docs/HARNESS.md for what each one exists for. Real secrets live in .env (gitignored), never here.",
   "permissions": {
     "allow": [
       "Bash(pnpm install)",
@@ -16,6 +16,8 @@
       "Bash(docker compose ps:*)",
       "Bash(docker compose logs:*)",
       "Bash(vitest:*)",
+      "Bash(bash testing/harness_hooks.sh)",
+      "Bash(bash testing/:*)",
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -34,11 +36,92 @@
       "Bash(rm -rf:*)",
       "Bash(git push --force:*)",
       "Bash(drizzle-kit drop:*)",
-      "Bash(psql:*DROP*)"
+      "Bash(psql* DROP*)"
+    ]
+  },
+  "$hooksComment": "Node rather than shell so the same files run on a Windows dev box and on the ubuntu-latest runner in .github/workflows/agent-issue-to-pr.yml. One guardrail definition, two execution contexts. Every hook fails open on malformed input — a guard that crashes closed would deny every subsequent tool call in the session.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/session-brief.mjs"],
+            "timeout": 15,
+            "statusMessage": "Loading session brief"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-write.mjs"],
+            "timeout": 15,
+            "statusMessage": "Checking write target"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-bash.mjs"],
+            "timeout": 15,
+            "statusMessage": "Checking command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/scan-secrets.mjs"],
+            "timeout": 15,
+            "statusMessage": "Scanning for credentials"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/record-bash.mjs"],
+            "timeout": 15,
+            "statusMessage": "Recording test outcome"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/gate-turn.mjs"],
+            "timeout": 30,
+            "statusMessage": "Running end-of-turn gates"
+          }
+        ]
+      }
     ]
   },
   "env": {
-    "$comment": "Real secrets go in .env (gitignored), not here. These are non-secret defaults.",
+    "$comment": "Non-secret defaults. MEMOS_DIFF_BUDGET_* tune the Stop-hook diff budget; CI sets stricter values in the workflow.",
     "MEMOS_LOG_LEVEL": "debug"
   }
 }

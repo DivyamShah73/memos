@@ -38,6 +38,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# agent harness state (per-session ledger written by .claude/hooks/, see docs/HARNESS.md)
+.claude/.state/
+.agent/
+
 # misc
 tmp/
 .cache/
