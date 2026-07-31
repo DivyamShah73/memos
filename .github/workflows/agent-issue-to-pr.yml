@@ -105,8 +105,11 @@ jobs:
         with:
           name: triage-spec
           path: .agent/
-          include-hidden-files: true    # <-- add: v4 skips dot-dirs by default
-          if-no-files-found: error      # <-- add: fail here, not one job later
+          # upload-artifact v4 skips dot-directories by default, so `.agent/` uploaded nothing and the
+          # build job failed a step later on the download. `error` makes an empty artifact fail at the
+          # source instead of warning and surfacing somewhere else.
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
 
   build:
@@ -187,12 +190,48 @@ jobs:
           # invariant, whether a test would catch a wrong implementation, and what the minimal diff is —
           # judgment, unattended, with write access. It is also the only stage whose mistakes reach a
           # pull request.
+          #
+          # --permission-mode bypassPermissions deserves an explanation, because the name sounds like
+          # the opposite of everything else in this repo.
+          #
+          # A permission allowlist is an *interactive approval* mechanism: unlisted tool call -> ask the
+          # human. Unattended there is no human, so it degrades to "deny everything unlisted" — the
+          # first real run burned 8 denials across 30 turns and wrote nothing.
+          #
+          # Nothing that actually guards this pipeline lives in that layer. Cannot edit .claude/ or
+          # .github/ — hook. No destructive commands, no credential exfiltration — hook. Cannot end a
+          # turn with untested invariants or an unrun suite — hook. Diff budget — hook. Every one of
+          # those still fires here, because hooks are independent of permission mode. What is bypassed
+          # is only the approval prompt that cannot function without a person attached.
+          #
+          # This is the clearest argument for the whole design: enforcement placed at rung 1 or in
+          # permissions evaporates in CI. Placed in hooks, it runs identically in both contexts.
           claude_args: >-
             --model claude-opus-5
             --max-turns 40
+            --permission-mode bypassPermissions
             --disallowedTools WebFetch,WebSearch
+          # Without this the log carries only summary events, so a failed run is diagnosable by
+          # inference rather than by reading what the agent actually did. That cost a full run to learn.
+          show_full_output: "true"
 
       # ---- Machine gates. No model in the loop; exit codes decide. ----
+
+      # This runs FIRST. On the first real run the agent produced nothing, and typecheck, the API
+      # suite, the hook tests and the diff budget all reported PASS — because they were run against an
+      # unchanged tree. Four green gates over zero work is the exact false assurance this file exists
+      # to prevent, so "did anything happen at all" is now the precondition for the rest.
+      - name: Gate — agent produced changes
+        run: |
+          git add -A
+          if git diff --cached --quiet HEAD; then
+            echo "::error::The agent made no changes. Not running the remaining gates — they would" \
+                 "all pass against an unchanged tree and report a green build over no work." \
+                 "Check the Implement step output above for permission denials or a refusal."
+            exit 1
+          fi
+          echo "Agent changed $(git diff --cached --name-only HEAD | wc -l | tr -d ' ') file(s)."
+
       - name: Gate — typecheck
         id: typecheck
         continue-on-error: true
@@ -212,9 +251,9 @@ jobs:
         id: budget
         continue-on-error: true
         run: |
-          # Stage first: `git diff` ignores untracked files, so without this an agent that added
-          # one 800-line new file would score +0 and sail through the budget.
-          git add -A
+          # Reads the staged diff: the "agent produced changes" gate above already ran `git add -A`,
+          # which matters because `git diff` alone ignores untracked files — without staging, an agent
+          # that added one 800-line new file would score +0 and sail through the budget.
           added=$(git diff --cached --numstat HEAD -- . | awk '{s+=$1} END {print s+0}')
           files=$(git diff --cached --name-only HEAD -- . | wc -l | tr -d ' ')
           echo "added=$added files=$files (budget ${MEMOS_DIFF_BUDGET_LINES}/${MEMOS_DIFF_BUDGET_FILES})"
