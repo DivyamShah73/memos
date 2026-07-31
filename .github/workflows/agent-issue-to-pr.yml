@@ -278,8 +278,19 @@ jobs:
       # anything it left unstaged — so there is nothing left to commit here. Keeping its commit history
       # is the better outcome anyway: a reviewer can read how it got there instead of one squashed blob.
       - name: Push branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git push origin "${{ steps.branch.outputs.name }}"
+          # claude-code-action revokes its GitHub App token when the Implement step ends, and that also
+          # invalidates the git credential it configured — so this push has to re-authenticate or it
+          # fails with "Password authentication is not supported". Uses the job's GITHUB_TOKEN via an
+          # explicit URL rather than persisting a token into git config.
+          #
+          # Consequence worth knowing: a PR opened with GITHUB_TOKEN does not trigger other workflows,
+          # so agent-pr-review.yml will not fire on its own. Closing that properly means a repo-owned
+          # GitHub App (APP_ID + APP_PRIVATE_KEY) whose token outlives this step.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "HEAD:refs/heads/${{ steps.branch.outputs.name }}"
 
       # Any red gate => draft. A draft PR is an honest signal that a human must look before this is
       # considered work; a ready-for-review PR over a failing suite is a lie the reviewer has to
