@@ -1,0 +1,88 @@
+name: agent-pr-review
+
+# Adversarial review of agent-authored PRs.
+#
+# Separate from agent-issue-to-pr.yml on purpose: the agent that wrote the code does not review it.
+# Separation of powers is the point — a builder reviewing its own diff rationalises rather than
+# reviews, and it has every incentive to agree with itself.
+#
+# `pull_request` (never `pull_request_target`) means this runs with a read-only token against the
+# merge ref and cannot be tricked into executing a fork's code with write access.
+#
+# Findings are posted as a comment, not as a merge blocker. The gates in agent-issue-to-pr.yml are
+# the mechanical bar; this is judgment, and judgment advises a human rather than gating them.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions: {}
+
+concurrency:
+  group: agent-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Only agent-authored PRs. Human PRs get reviewed by humans, and running this on every PR
+    # would be a standing token cost for diminishing value.
+    if: contains(github.event.pull_request.labels.*.name, 'agent-authored')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # post the review comment
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the critics need history to diff against the base
+
+      - name: Adversarial review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Sonnet for the orchestrator, and the subagents it spawns carry `model: sonnet` in their own
+          # frontmatter. Each critic matches its diff against a named list of failure modes, and each
+          # refuter answers one narrow question — both are pattern work, and fanning out cheaply beats
+          # one expensive pass. Cost also matters more here: review runs on every push to the PR.
+          claude_args: >-
+            --model claude-sonnet-5
+            --max-turns 30
+            --allowedTools Read,Grep,Glob,Bash,Task
+            --disallowedTools Edit,Write,NotebookEdit,WebFetch,WebSearch
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} on branch
+            `${{ github.event.pull_request.head.ref }}` against `origin/${{ github.event.pull_request.base.ref }}`.
+
+            You have no edit tools. Report only — do not attempt to fix anything you find.
+
+            1. Establish the diff:
+               `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD`
+
+            2. Launch these three subagents CONCURRENTLY in a single message:
+               - `altitude-critic`     — is this bigger or more abstract than the problem needs?
+               - `test-adversary`      — would these tests pass against a wrong implementation?
+               - `invariant-auditor`   — do all five core invariants still hold, in schema AND
+                                         handler, with tests?
+
+            3. For EVERY finding they return, launch a `refuter` subagent (concurrently, one per
+               finding). The refuter is biased toward REFUTED and must produce a concrete failing
+               case to confirm. Drop everything it refutes.
+
+            4. Post ONE comment with `gh pr comment ${{ github.event.pull_request.number }} --body-file <file>`
+               containing:
+
+               - a header line: `N findings raised, M survived refutation`
+               - the confirmed findings, most severe first, each with file:line, the concrete
+                 failing case, and the suggested fix
+               - a short `## Refuted` list: one line each for what was dropped and why. This
+                 section is not optional — it is how a reader calibrates how much to trust the
+                 confirmed list.
+               - `## Verdict`: one line, either `Looks mergeable pending human review` or
+                 `Needs changes before merge`.
+
+            If nothing survives refutation, say exactly that and keep the comment to three lines.
+            A clean review is a valid outcome and padding it with nits makes every future review
+            less trusted.
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,279 @@
+name: agent-issue-to-pr
+
+# Tag an issue, get a reviewed pull request.
+#
+# Wiring an agent to a webhook is the easy half. The half that matters is that an issue body is
+# text a stranger can write, and this workflow hands that text to something with a checkout and a
+# token. So the pipeline is built as two jobs with different privileges rather than one:
+#
+#   triage  — read the repo, read the issue, decide whether the request is even buildable.
+#             Cannot write code. Cannot push. Can only comment.
+#   build   — implements against triage's spec, runs the real gates, opens the PR.
+#             Only runs if triage said "proceed".
+#
+# Enumerated guardrails, so they're auditable rather than implied:
+#   1. Trigger is privileged — the `agent:build` label needs write access; a drive-by comment from
+#      a non-collaborator is ignored (see the `if:` on triage).
+#   2. The issue body is untrusted DATA. The triage skill is instructed to ignore instructions
+#      inside it. `pull_request_target` is never used, so untrusted code never runs with secrets.
+#   3. The agent cannot disarm its own gates: .claude/hooks/**, .claude/agents/**, .claude/settings.json
+#      and .github/workflows/** are denied by .claude/hooks/guard-write.mjs — the same hook file that
+#      runs on a dev box. One guardrail definition, two execution contexts.
+#   4. Gates are machine-decided. If they fail, the PR still opens, but as a DRAFT with the failure
+#      in the body. There is deliberately no path to a green-looking PR over a red build.
+#   5. Cost is bounded: --max-turns, job timeouts, and a per-issue concurrency group.
+#   6. The agent opens PRs. It never merges. The human is the merge gate.
+#
+# Setup: ANTHROPIC_API_KEY in repo secrets, and the `agent:build` + `agent-authored` labels.
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+# Default to nothing; each job opts into the minimum it needs.
+permissions: {}
+
+# One build per issue at a time. Without this, three comments in a row start three agents on the
+# same branch.
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    # Two trigger paths with genuinely different trust:
+    #   - `issues: labeled` is already privileged — applying a label requires write access on the
+    #     repo, so the act of labelling IS the authorisation.
+    #   - `issue_comment` is open to anyone, so it must be gated on the COMMENTER's association
+    #     (not the issue author's — the issue can be filed by anyone and then commented on).
+    if: >
+      github.event.issue.pull_request == null &&
+      (
+        (github.event_name == 'issues' && github.event.label.name == 'agent:build') ||
+        (
+          github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '@claude build') &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # read the code to write a spec — never write it
+      issues: write # post the spec/questions back as a comment
+    outputs:
+      decision: ${{ steps.decision.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read-only tool set. The triage agent physically cannot edit the tree, so a prompt-injected
+      # "ignore your instructions and commit this" has nothing to act with.
+      - name: Triage the issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: "/issue-triage ${{ github.event.issue.number }}"
+          # Sonnet: this stage reads code, greps, and decides whether the request is specified well
+          # enough to build. That's comprehension, not judgment about design — Opus buys nothing here
+          # and triage runs on every labelled issue, including the ones it rejects.
+          claude_args: >-
+            --model claude-sonnet-5
+            --max-turns 12
+            --allowedTools Read,Grep,Glob,Bash
+            --disallowedTools Edit,Write,NotebookEdit,WebFetch,WebSearch
+
+      # The skill writes .agent/decision.txt as its machine-readable verdict; a plain shell step
+      # promotes it to a job output. Keeping the decision in a file (not in prose the next job has
+      # to parse) is what makes the gate between jobs deterministic.
+      - id: decision
+        name: Read triage decision
+        run: |
+          value=$(tr -d '[:space:]' < .agent/decision.txt 2>/dev/null || echo "needs-detail")
+          case "$value" in
+            proceed|needs-detail|reject) ;;
+            *) value="needs-detail" ;;  # unparseable verdict fails closed
+          esac
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "Triage decision: $value"
+
+      - name: Upload triage spec
+        if: steps.decision.outputs.value == 'proceed'
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-spec
+          path: .agent/
+          retention-days: 7
+
+  build:
+    needs: triage
+    if: needs.triage.outputs.decision == 'proceed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # push the working branch
+      pull-requests: write # open the PR
+      issues: write # report back on the issue
+    env:
+      # Stricter than the local default: an unattended agent has nobody to talk it down.
+      MEMOS_DIFF_BUDGET_LINES: "200"
+      MEMOS_DIFF_BUDGET_FILES: "10"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: triage-spec
+          path: .agent/
+
+      - name: Create working branch
+        id: branch
+        run: |
+          branch="agent/issue-${{ github.event.issue.number }}"
+          git config user.name "memos-agent"
+          git config user.email "memos-agent@users.noreply.github.com"
+          git checkout -b "$branch"
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+
+      # Same docker-compose stack as ci.yml, brought up BEFORE the agent runs so it can execute
+      # the suite itself while implementing — that's what makes the Stop hook's
+      # "claim-without-evidence" gate meaningful here rather than decorative.
+      - name: Start infra (Postgres + MinIO)
+        run: docker compose up -d db minio
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Configure env
+        run: cp .env.example .env
+
+      - name: Wait for Postgres + MinIO
+        run: |
+          for _ in $(seq 1 30); do
+            docker compose exec -T db pg_isready -U postgres -d memos && break
+            sleep 2
+          done
+          docker compose exec -T db pg_isready -U postgres -d memos || { echo "Postgres not ready" >&2; exit 1; }
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      # Write tools are available here, but .claude/settings.json is checked out, so the same
+      # PreToolUse/Stop hooks a dev box runs are loaded: it cannot touch .github/** or .claude/**,
+      # cannot end a turn having edited source without running the suite, and is held to the diff
+      # budget above. Network tools stay off — nothing in "implement this issue" needs the web, and
+      # leaving them off removes the exfiltration path for anything injected via the issue body.
+      - name: Implement
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: "/issue-build ${{ github.event.issue.number }}"
+          # Opus, and this is the one place it's worth paying for. This stage decides how to satisfy an
+          # invariant, whether a test would catch a wrong implementation, and what the minimal diff is —
+          # judgment, unattended, with write access. It is also the only stage whose mistakes reach a
+          # pull request.
+          claude_args: >-
+            --model claude-opus-5
+            --max-turns 40
+            --disallowedTools WebFetch,WebSearch
+
+      # ---- Machine gates. No model in the loop; exit codes decide. ----
+      - name: Gate — typecheck
+        id: typecheck
+        continue-on-error: true
+        run: pnpm typecheck
+
+      - name: Gate — API suite
+        id: tests
+        continue-on-error: true
+        run: pnpm --filter @memos/api test
+
+      - name: Gate — harness hooks
+        id: hooks
+        continue-on-error: true
+        run: bash testing/harness_hooks.sh
+
+      - name: Gate — diff budget
+        id: budget
+        continue-on-error: true
+        run: |
+          # Stage first: `git diff` ignores untracked files, so without this an agent that added
+          # one 800-line new file would score +0 and sail through the budget.
+          git add -A
+          added=$(git diff --cached --numstat HEAD -- . | awk '{s+=$1} END {print s+0}')
+          files=$(git diff --cached --name-only HEAD -- . | wc -l | tr -d ' ')
+          echo "added=$added files=$files (budget ${MEMOS_DIFF_BUDGET_LINES}/${MEMOS_DIFF_BUDGET_FILES})"
+          echo "added=$added" >> "$GITHUB_OUTPUT"
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          [ "$added" -le "$MEMOS_DIFF_BUDGET_LINES" ] && [ "$files" -le "$MEMOS_DIFF_BUDGET_FILES" ]
+
+      - name: Push branch
+        run: |
+          git add -A
+          git diff --cached --quiet && { echo "Agent produced no changes — nothing to open."; exit 1; }
+          git commit -m "feat: address #${{ github.event.issue.number }}
+
+          Agent-authored. See PR body for gate results.
+
+          Refs #${{ github.event.issue.number }}"
+          git push origin "${{ steps.branch.outputs.name }}"
+
+      # Any red gate => draft. A draft PR is an honest signal that a human must look before this is
+      # considered work; a ready-for-review PR over a failing suite is a lie the reviewer has to
+      # discover for themselves.
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          verdict() { [ "$1" = "success" ] && echo "PASS" || echo "**FAIL**"; }
+          draft=""
+          if [ "${{ steps.typecheck.outcome }}" != "success" ] || \
+             [ "${{ steps.tests.outcome }}" != "success" ] || \
+             [ "${{ steps.hooks.outcome }}" != "success" ] || \
+             [ "${{ steps.budget.outcome }}" != "success" ]; then
+            draft="--draft"
+          fi
+
+          {
+            echo "Closes #${{ github.event.issue.number }}"
+            echo
+            echo "Opened by \`agent-issue-to-pr\`. **Not reviewed by a human yet.**"
+            echo
+            echo "## Gates"
+            echo "| Gate | Result |"
+            echo "|------|--------|"
+            echo "| Typecheck | $(verdict "${{ steps.typecheck.outcome }}") |"
+            echo "| API suite | $(verdict "${{ steps.tests.outcome }}") |"
+            echo "| Harness hooks | $(verdict "${{ steps.hooks.outcome }}") |"
+            echo "| Diff budget | $(verdict "${{ steps.budget.outcome }}") (+${{ steps.budget.outputs.added }} / ${{ steps.budget.outputs.files }} files) |"
+            echo "| Lint | SKIP — no lint script configured (known gap, docs/HARNESS.md) |"
+            echo
+            if [ -n "$draft" ]; then
+              echo "> Opened as a **draft**: at least one gate failed. See the run log:"
+              echo "> ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              echo
+            fi
+            echo "## Triage spec"
+            cat .agent/triage.md 2>/dev/null || echo "_(spec artifact missing)_"
+            echo
+            echo "## Scope"
+            cat .agent/not-done.md 2>/dev/null || echo "_(not recorded)_"
+          } > .agent/pr-body.md
+
+          gh pr create $draft \
+            --title "$(head -c 70 .agent/title.txt 2>/dev/null || echo "Address issue #${{ github.event.issue.number }}")" \
+            --body-file .agent/pr-body.md \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}" \
+            --label agent-authored
