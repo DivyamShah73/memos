@@ -591,3 +591,54 @@ isolation + role-gate + `agent.me` role); `testing/phase15.sh` proves the read s
 chained into `smoke_all`; `admin.spec.ts` e2e covers signup → dashboard, the CEO admin loop (invite +
 mint), and the member role-gate; **`smoke_all.sh` 0–15 green**. No new migrations — the data model
 already supported it. On branch `phase-15-admin-ui` for review.
+
+## 2026-07-31 — Agent harness: enforcement ladder (hooks, restricted subagents, issue→PR)
+
+Built the harness this repo is worked on *through*, on one principle: an LLM does what you ask most
+of the time, which is fine for suggestions and useless for invariants — so the rules that matter are
+enforced by a mechanism outside the model's context. Same argument as ADR 002 making isolation
+Postgres RLS rather than a handler `WHERE`. Five rungs, weakest to strongest: `CLAUDE.md`
+(suggestion) → skills (procedure on demand) → subagents with restricted `tools:` (structural) →
+**hooks** (deterministic) → CI gates (machine-verified). Which rung a rule lives on is now a
+decision, not an accident. ADR 014 records it; `docs/HARNESS.md` is the reference.
+
+Six Node hooks in `.claude/hooks/` (Node, not shell, so the *same files* run here and on
+`ubuntu-latest`). `guard-write.mjs` denies writes to `.claude/hooks|agents/**`, `settings.json`, and
+`.github/workflows/**` — **an agent may not modify the mechanism that constrains it**, which no
+`CLAUDE.md` line can achieve, since the instruction is addressed to the thing being constrained.
+Building it surfaced the obvious hole: `PreToolUse(Edit|Write)` never fires for a shell redirect, and
+the CI triage job is exactly that shape (Bash allowed, Edit/Write denied) — so `guard-bash.mjs` also
+denies shell writes (`>`, `>>`, `tee`, `sed -i`, `cp`, `mv`) to those paths while keeping *reads*
+legal, because a guard with a bad false-positive rate gets switched off. `gate-turn.mjs` is the
+load-bearing one: the guards append to a per-session ledger and the `Stop` hook reasons over the
+whole turn — **invariant-without-test** (an invariant file moved with no test),
+**claim-without-evidence** (`packages/*/src` edited, suite never run — the product's evidence gate
+aimed at the agent), and **diff-budget** (~150 lines/8 files, satisfiable by cutting *or*
+justifying). Blocks are keyed by `(prompt_id, gate)` plus `stop_hook_active` so a `Stop` hook can't
+deadlock the session, and every hook fails *open* on malformed input, since failing closed on a guard
+would deny every subsequent tool call in the session.
+
+Five subagents, with the tool list as the load-bearing line — `reuse-scout` (reinvention),
+`altitude-critic` (over-generation; must cost out the smaller version), `test-adversary` (names a
+mutation that survives the test), `invariant-auditor` (the five invariants, schema *and* handler), and
+`refuter`, which every finding must survive before reaching a human. Critics have no `Edit`, because
+telling a review agent "report, don't fix" demonstrably doesn't hold. Phase 2 wires the same ladder to
+GitHub: `agent-issue-to-pr.yml` splits **triage** (`contents: read`, Edit/Write denied, may decide an
+issue isn't buildable and stop) from **build** (gated on triage's verdict), with a privileged trigger
+(labelling needs write access; the comment path checks the *commenter's* association), the issue body
+treated as untrusted data, no `pull_request_target`, network tools off, and **draft-on-red** so there
+is no path to a green-looking PR over a red build. `agent-pr-review.yml` reviews agent-authored PRs —
+the builder never reviews itself.
+
+Gate: **`testing/harness_hooks.sh` 49/49** — asserts the denials, the matching *allowed* forms
+(false-positive control), `Stop`-gate loop protection, and malformed-payload tolerance; ~2s, no DB, no
+network, no tokens. No runtime code touched, so the API suite is unchanged. Two things the build
+itself taught: the shell-redirect hole above, and a live false positive — appending this very entry
+via a heredoc was denied, because `guard-bash.mjs` scanned the heredoc *body*, which quotes a
+protected path, as if it were the command (fix: strip heredoc bodies before matching; pending, since
+the guard correctly refuses to let an agent patch its own guard). Known gaps written down rather than
+hidden: **no package defines a `lint` script**, so `pnpm lint` — required by `CLAUDE.md`'s definition
+of done — exits 0 having run nothing, and the `gate` skill reports `SKIPPED`, never `PASS`;
+`claim-without-evidence` records intent, not exit code, because `PreToolUse` precedes execution; and
+nothing asserts that a future `claude-code-action` still honours project hooks. On branch
+`feat/agent-harness`, **uncommitted**, for review.
