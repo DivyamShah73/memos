@@ -105,6 +105,8 @@ jobs:
         with:
           name: triage-spec
           path: .agent/
+          include-hidden-files: true    # <-- add: v4 skips dot-dirs by default
+          if-no-files-found: error      # <-- add: fail here, not one job later
           retention-days: 7
 
   build:
