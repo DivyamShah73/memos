@@ -13,15 +13,18 @@
     "db:generate": "pnpm --filter @memos/api run db:generate",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
-    "lint": "pnpm -r --if-present run lint",
+    "lint": "eslint .",
     "dev:api": "pnpm --filter @memos/api run dev",
     "dev:web": "pnpm --filter @memos/web run dev"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.30.0",
+    "eslint": "^10.8.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^2.1.8"
   }
 }
