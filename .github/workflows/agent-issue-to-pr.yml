@@ -206,9 +206,12 @@ jobs:
           #
           # This is the clearest argument for the whole design: enforcement placed at rung 1 or in
           # permissions evaporates in CI. Placed in hooks, it runs identically in both contexts.
+          # 40 was too low and the run died at the cap having done most of the work. A spec that names
+          # four files plus a new test file is legitimately dozens of turns, and the Stop gates spend
+          # one each time they block — the gates are part of the turn budget, not free.
           claude_args: >-
             --model claude-opus-5
-            --max-turns 40
+            --max-turns 90
             --permission-mode bypassPermissions
             --disallowedTools WebFetch,WebSearch
           # Without this the log carries only summary events, so a failed run is diagnosable by
