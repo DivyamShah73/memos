@@ -26,7 +26,7 @@ interface AgentRow {
 const card = "rounded-xl border border-border bg-surface/70 p-4";
 
 export default async function AdminPage() {
-  let me: AgentContext | null = null;
+  let me: AgentContext | null;
   try {
     me = await callIntent<AgentContext>("agent.me");
   } catch {

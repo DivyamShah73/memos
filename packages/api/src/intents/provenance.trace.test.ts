@@ -7,7 +7,6 @@ import {
   ownerDb,
   seedArtifact,
   seedBase,
-  seedMilestone,
   seedObjective,
   seedProject,
   seedWorkflowRun,

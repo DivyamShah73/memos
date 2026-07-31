@@ -63,7 +63,6 @@ export async function runBriefEscalation(
       title: `Escalation: unacked brief "${b.title}"`,
       body: `Agent ${b.targetId} has not acknowledged a brief for over 24h. Escalating to the team.\n\n${marker}`,
       targetKind: "team",
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       targetId: b.teamId!, // non-null: isNotNull(agents.teamId) filtered nulls in the query
       authorId: "governance.escalation",
     });

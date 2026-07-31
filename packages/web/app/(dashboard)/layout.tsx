@@ -20,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Everything below reads AS the logged-in user (their token is in the session cookie), so the
   // sidebar identity, the project list, and every page are scoped to that person (Phase 13/ADR-011).
-  let ctx: AgentContext | null = null;
+  let ctx: AgentContext | null;
   try {
     ctx = await callIntent<AgentContext>("agent.me");
   } catch {

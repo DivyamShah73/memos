@@ -6,7 +6,6 @@ import {
   enrollAgent,
   ownerDb,
   seedBase,
-  seedLearning,
   seedProject,
   seedWorkflowRun,
 } from "../_testutil.js";

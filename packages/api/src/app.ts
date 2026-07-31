@@ -106,7 +106,7 @@ app.post(
     // Rate-limit key source is the ACTUAL connection's remote address, not a client-supplied
     // header — X-Forwarded-For is spoofable and would let a caller mint a fresh bucket per
     // request. Trusted-proxy XFF handling (with an allowlist) is Phase 6.
-    let clientIp = "local";
+    let clientIp: string;
     try {
       clientIp = getConnInfo(c).remote.address ?? "local";
     } catch {
