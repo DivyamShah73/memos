@@ -8,7 +8,7 @@ import type { IntentContext } from "../core/context.js";
 import { ERROR_TYPE, fail, ok, type Envelope } from "../core/envelope.js";
 import { isRlsViolation } from "../core/pgerrors.js";
 import { publishActivity } from "../core/events.js";
-import { assertEvidence, assertRunWritable } from "./_evidence.js";
+import { assertAppliesTo, assertEvidence, assertRunWritable } from "./_evidence.js";
 import { learnings as learningsTable } from "../db/schema.js";
 
 type TxResult = { kind: "error"; message: string } | { kind: "ok"; ids: string[] };
@@ -39,6 +39,9 @@ export async function learningRecord(
       });
       if (ev.kind === "validation") return { kind: "error", message: ev.message };
 
+      const tags = assertAppliesTo(learnings);
+      if (tags.kind === "validation") return { kind: "error", message: tags.message };
+
       const inserted = await tx
         .insert(learningsTable)
         .values(
@@ -47,7 +50,7 @@ export async function learningRecord(
             bdId: bd_id,
             agentId: agent.id,
             claim: l.claim,
-            appliesTo: l.applies_to,
+            appliesTo: l.applies_to, // already trimmed + lowercased by the schema transform
             confidence: l.confidence,
             nonObviousMarker: l.non_obvious_marker ?? null,
             evidenceArtifactId: l.evidence_artifact_id ?? null,

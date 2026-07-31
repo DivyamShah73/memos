@@ -1,9 +1,28 @@
 import { z } from "zod";
 
+/** Tags are compared and stored normalized, so `" Project.Acme "` can't dodge the check below. */
+export const normalizeAppliesTo = (tag: string): string => tag.trim().toLowerCase();
+
+/**
+ * `project.`/`team.`/`agent.` are MemOS id prefixes, never problem-domain terms — a tag like
+ * `project.acme` re-silos the learning it's meant to make findable across projects (invariant 5).
+ * Only these unambiguous id shapes are rejected here; judging whether a term is a *product* name
+ * is the downstream tag-hygiene critic's job.
+ */
+export const isIdShapedTag = (tag: string): boolean =>
+  /^(project|team|agent)\./.test(normalizeAppliesTo(tag));
+
+const appliesToTagSchema = z
+  .string()
+  .min(1)
+  .transform(normalizeAppliesTo)
+  .refine((t) => t.length > 0, "must not be blank")
+  .refine((t) => !isIdShapedTag(t), "must be a problem-domain term, not a project/team/agent id");
+
 export const learningItemSchema = z.object({
   claim: z.string().min(1, "is required"),
   // problem-domain tags (NOT project names); the tag-hygiene critic checks quality later.
-  applies_to: z.array(z.string().min(1)).min(1, "at least one applies_to tag is required"),
+  applies_to: z.array(appliesToTagSchema).min(1, "at least one applies_to tag is required"),
   confidence: z.enum(["low", "medium", "high"]),
   non_obvious_marker: z.string().optional(),
   evidence_artifact_id: z.string().uuid().optional(),
