@@ -268,6 +268,9 @@ exists to prevent.
   enrolled agent uses — and injects what the fleet already knows. Strictly best-effort: 1.5s timeout,
   and every failure path (no config, server down, token rejected) falls back to the journal silently,
   because a `SessionStart` hook must never depend on a server being up.
+- **`process.env` reads as `.env` to the credential-read rule.** `guard-bash.mjs` blocks
+  `head … .env`, so any command containing `process.env.SOMETHING` after a `head`/`tail` matches.
+  Needs a negative lookbehind for `process`. Found by tripping it while debugging the suite.
 - **Diff budget counts lines, not complexity.** A 200-line mechanical rename trips it; a 40-line
   subtle abstraction doesn't. It's a prompt for examination, not a verdict — which is why blocking
   can be satisfied by justifying.

@@ -39,7 +39,10 @@ assert_silent() {
   if [ -z "$2" ]; then pass "$1"; else fail "$1" "no output (pass-through)" "$2"; fi
 }
 
-hook() { node "$HOOKS/$1"; }
+# Cleared for every invocation: MEMOS_HARNESS_UNLOCK in the operator's environment turns four
+# denials into pass-throughs, and the suite would report them as failures of the guard rather than
+# of the environment. It cost a confusing red run to notice. The unlock gets its own test below.
+hook() { env -u MEMOS_HARNESS_UNLOCK node "$HOOKS/$1"; }
 
 section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
@@ -50,6 +53,13 @@ for target in ".github/workflows/ci.yml" ".claude/hooks/_lib.mjs" ".claude/setti
   out=$(printf '{"session_id":"t-gw","tool_input":{"file_path":"%s"}}' "$target" | hook guard-write.mjs)
   assert_has "denies self-modification: $target" '"permissionDecision":"deny"' "$out"
 done
+
+# The documented escape hatch, tested so it can't become folklore: with the unlock present, the same
+# write is allowed. This is the one deliberate hole in the write guard, so it should be visible in the
+# suite rather than discovered.
+out=$(printf '{"session_id":"t-gw","tool_input":{"file_path":".claude/hooks/_lib.mjs"}}' \
+  | MEMOS_HARNESS_UNLOCK=1 node "$HOOKS/guard-write.mjs")
+assert_silent "MEMOS_HARNESS_UNLOCK allows an authorised harness edit" "$out"
 
 out=$(printf '{"session_id":"t-gw","tool_input":{"file_path":"packages/api/src/intents/fact.query.ts"}}' | hook guard-write.mjs)
 assert_silent "allows ordinary source edit" "$out"
