@@ -166,7 +166,15 @@ if (blockEntries.length === 0) {
   }
 }
 console.log(`  invariant files touched: ${h.invariantFiles.size}`);
-console.log(`  source edits: ${h.sourceEdits}   test runs: ${h.testRuns}   red runs caught: ${h.failedRuns}`);
+console.log(`  source edits: ${h.sourceEdits}   test runs recorded: ${h.testRuns}`);
+// Deliberately not headlined as "red runs caught". record-bash.mjs falls back to scanning output text
+// when there is no structured exit code, and its pattern (\d+\s+failed) matches the string "0 failed"
+// — so a *green* run printing "61 passed, 0 failed" is recorded as a failure. Until that regex is
+// fixed this count is not trustworthy, and reporting it as a headline number would be exactly the
+// unverified claim the rest of this harness exists to prevent.
+if (h.failedRuns > 0) {
+  console.log(`  runs flagged non-green: ${h.failedRuns}  \x1b[33m(unreliable — see Known gaps)\x1b[0m`);
+}
 
 if (runs.length) {
   console.log("\n\x1b[1mAgent pipeline runs\x1b[0m");
