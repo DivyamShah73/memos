@@ -237,7 +237,7 @@ it can silently stop catching fake tests — nothing fails, no gate goes red, an
 later. That is the same failure this whole repo argues against, applied to the critics themselves.
 
 ```bash
-node testing/agent-evals/run.mjs        # 5 fixtures, ~6 min, ~$0.50
+node testing/agent-evals/run.mjs        # 6 fixtures, ~8 min, ~$0.60
 ```
 
 Each fixture plants a known defect in an **isolated git worktree** and runs the *real* subagent
@@ -251,6 +251,11 @@ of its prompt:
 | 03 | Evidence gate weakened from `!== "low"` to `=== "high"`, no test | `invariant-auditor` |
 | 04 | A factory + strategy interface with one call site | `altitude-critic` |
 | 05 | **A docs-only change** | **nobody — must report no findings** |
+| 06 | A request for something `_fts.ts` already does | `reuse-scout` (works from a task, not a diff) |
+
+Five of the five subagents have coverage. `refuter` does not, because its input is another agent's
+finding rather than a diff — evaluating it properly needs a fixture pair (a true finding it must
+confirm, a false one it must destroy), which is the obvious next addition.
 
 Fixture 05 is the one that matters. A critic that flags everything is as useless as one that flags
 nothing, so **false-positive rate is measured, not assumed** — the same reasoning as
@@ -323,6 +328,14 @@ exists to prevent.
   enrolled agent uses — and injects what the fleet already knows. Strictly best-effort: 1.5s timeout,
   and every failure path (no config, server down, token rejected) falls back to the journal silently,
   because a `SessionStart` hook must never depend on a server being up.
+- **The eval worktrees are isolated on disk but share the database.** `git worktree` gives each
+  fixture its own checkout, which is enough for the critics — they read code. But an early run of the
+  `test-adversary` fixture ran `vitest` from inside the worktree, which connected to the *same*
+  Postgres, seeded `project.evalctl`, and died before cleanup. The orphan then broke the real API
+  suite's teardown with a foreign-key violation on `teams`, and the suite failed 26 files while
+  reporting 147 passing tests — a confusing signature worth recognising. Mitigated by telling the
+  fixture not to run the suite (mutation analysis is a reading exercise anyway); the proper fix is a
+  throwaway database per eval run. **Isolation is per-resource, not a property you get once.**
 - **`process.env` reads as `.env` to the credential-read rule.** `guard-bash.mjs` blocks
   `head … .env`, so any command containing `process.env.SOMETHING` after a `head`/`tail` matches.
   Needs a negative lookbehind for `process`. Found by tripping it while debugging the suite.
