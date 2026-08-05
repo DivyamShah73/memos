@@ -1,0 +1,14 @@
+{
+  "$comment": "MemOS exposed to any MCP-capable coding agent. Committed so the whole team gets it; the token is read from the environment via ${VAR} expansion and is never stored here. Start the gateway first: docker compose up -d db minio && pnpm db:migrate && pnpm dev:api",
+  "mcpServers": {
+    "memos": {
+      "command": "npx",
+      "args": ["tsx", "sdk/memos-mcp/src/server.ts"],
+      "env": {
+        "MEMOS_API_URL": "${MEMOS_API_URL:-http://127.0.0.1:8787}",
+        "MEMOS_AGENT_TOKEN": "${MEMOS_AGENT_TOKEN}",
+        "MEMOS_PROJECT_ID": "${MEMOS_PROJECT_ID:-project.demo}"
+      }
+    }
+  }
+}
