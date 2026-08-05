@@ -229,6 +229,61 @@ finding, posts one comment. `pull_request` (never `pull_request_target`), read-o
 
 ---
 
+## Ring 3½ — the critics have regression tests
+
+The hooks had a test suite from the start. The subagents did not, and they are the least stable
+artifact in the harness, because they are **prompts**. Change one sentence in `test-adversary.md` and
+it can silently stop catching fake tests — nothing fails, no gate goes red, and you find out months
+later. That is the same failure this whole repo argues against, applied to the critics themselves.
+
+```bash
+node testing/agent-evals/run.mjs        # 5 fixtures, ~6 min, ~$0.50
+```
+
+Each fixture plants a known defect in an **isolated git worktree** and runs the *real* subagent
+against it via `claude -p`, so the actual `.claude/agents/` definition is exercised rather than a copy
+of its prompt:
+
+| Fixture | Planted defect | Must be caught by |
+|---|---|---|
+| 01 | A helper duplicating `_fts.ts` | `altitude-critic` |
+| 02 | A test asserting a hand-built literal, never calling the handler | `test-adversary` |
+| 03 | Evidence gate weakened from `!== "low"` to `=== "high"`, no test | `invariant-auditor` |
+| 04 | A factory + strategy interface with one call site | `altitude-critic` |
+| 05 | **A docs-only change** | **nobody — must report no findings** |
+
+Fixture 05 is the one that matters. A critic that flags everything is as useless as one that flags
+nothing, so **false-positive rate is measured, not assumed** — the same reasoning as
+`harness_hooks.sh` asserting the *allowed* command forms alongside the denials.
+
+**Two of the first attempts at that control had real defects the critics caught.** The first landed a
+helper with zero call sites; `altitude-critic` correctly called it scope-without-effect. The second
+was a test that couldn't run — `test-adversary` traced a wrong helper signature all the way to the
+`TypeError` in `beforeAll` and cited the real line numbers. The fixtures were wrong, not the critics,
+which is the most reassuring possible result from an eval suite.
+
+Known limitation, stated rather than hidden: assertions are keyword-based over the agent's prose.
+Weaker than a structured verdict; the honest fix is to make the critics emit JSON. It still catches
+the failure that matters — a critic that stops reporting the defect at all.
+
+## Does any of this actually fire?
+
+```bash
+node scripts/harness-report.mjs            # terminal
+node scripts/harness-report.mjs --html     # also writes harness-report.html
+```
+
+"Is your enforcement layer theatre?" is the fairest question anyone can ask, and it deserves a number.
+The report reads three real sources — no separate instrumentation to drift:
+
+- **Authorship provenance** from git trailers: what share of commits an agent co-authored. The same
+  idea MemOS is built on (every fact carries its provenance), applied to the repo itself — so
+  "do agent-authored commits get reverted more often?" becomes answerable later rather than a vibe.
+- **Hook enforcement activity** from the per-session ledgers the hooks already write. Block counts are
+  a *by-product of the guards running*, which is why they can't drift from the guards.
+- **Pipeline history** from the GitHub API, with duration and cost per run (cached in `.harness/`,
+  since cost only appears inside the run log).
+
 ## Known gaps
 
 Listed because a harness that hides its gaps is making exactly the claim-without-evidence mistake it
