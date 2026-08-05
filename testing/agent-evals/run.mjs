@@ -174,6 +174,19 @@ bash testing/harness_hooks.sh     # the agent hooks; no infra needed
     },
     expectClean: true,
   },
+  {
+    // reuse-scout is the only critic that works from a task description rather than a diff — it runs
+    // BEFORE anything is written. So its fixture is a request whose answer already exists in the
+    // repo: full-text search is already implemented in _fts.ts, and a scout that misses it would let
+    // the most expensive agent habit through (confident reinvention).
+    id: "06",
+    name: "reuse scout — must find the existing FTS helpers",
+    agent: "reuse-scout",
+    task:
+      "I want to add keyword search over facts in a project, ranked by relevance. " +
+      "What already exists in this repo that I should use instead of writing new code?",
+    expect: [/_fts/i, /(ftsQuery|ftsRank|ftsVector|fact\.query)/],
+  },
 ];
 
 const PROMPTS = {
@@ -193,6 +206,8 @@ const PROMPTS = {
     "Use the invariant-auditor subagent on the uncommitted changes in this working tree " +
     "(`git diff HEAD`). Report its findings verbatim. " +
     "If all five core invariants still hold, say exactly: NO FINDINGS.",
+  // Filled per-fixture: this agent takes a task description, not a diff.
+  "reuse-scout": null,
 };
 
 /** First 24 lines of the agent's output, indented — enough to see why an assertion missed. */
@@ -227,9 +242,12 @@ for (const fx of fixtures) {
     // Deliberately no `shell: true`. Through a shell, args are concatenated unescaped, and the
     // backticks and parentheses in these prompts get eaten — the agent then receives no task at all,
     // which looks identical to a failing assertion. Cost an hour to notice the first time.
+    const prompt =
+      PROMPTS[fx.agent] ??
+      `Use the ${fx.agent} subagent for this task, and report its output verbatim: ${fx.task}`;
     const out = execFileSync(
       "claude",
-      ["-p", PROMPTS[fx.agent], "--model", "claude-sonnet-5", "--permission-mode", "bypassPermissions"],
+      ["-p", prompt, "--model", "claude-sonnet-5", "--permission-mode", "bypassPermissions"],
       { cwd: dir, encoding: "utf8", timeout: 420000, maxBuffer: 10 * 1024 * 1024 },
     );
 
