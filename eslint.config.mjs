@@ -47,9 +47,10 @@ export default tseslint.config(
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
   {
-    // Hooks are plain Node scripts run by Claude Code, not part of any workspace's tsconfig.
-    // fetch/AbortSignal are Node 20+ globals — session-brief.mjs uses them to query MemOS.
-    files: [".claude/hooks/**/*.mjs"],
+    // Plain Node scripts outside any workspace tsconfig: the Claude Code hooks, and the test
+    // harnesses that drive them. fetch/AbortSignal are Node 20+ globals (session-brief.mjs queries
+    // MemOS with them); setTimeout is used for the MCP smoke test's request timeout.
+    files: [".claude/hooks/**/*.mjs", "testing/**/*.mjs"],
     languageOptions: {
       globals: {
         process: "readonly",
@@ -57,6 +58,7 @@ export default tseslint.config(
         console: "readonly",
         fetch: "readonly",
         AbortSignal: "readonly",
+        setTimeout: "readonly",
       },
     },
   },
