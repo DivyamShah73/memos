@@ -50,7 +50,7 @@ export default tseslint.config(
     // Plain Node scripts outside any workspace tsconfig: the Claude Code hooks, and the test
     // harnesses that drive them. fetch/AbortSignal are Node 20+ globals (session-brief.mjs queries
     // MemOS with them); setTimeout is used for the MCP smoke test's request timeout.
-    files: [".claude/hooks/**/*.mjs", "testing/**/*.mjs", "scripts/**/*.mjs"],
+    files: [".claude/hooks/**/*.mjs", "testing/**/*.mjs", "scripts/**/*.mjs", "sdk/**/*.mjs"],
     languageOptions: {
       globals: {
         process: "readonly",

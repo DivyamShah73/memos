@@ -14,11 +14,10 @@ import { spawn } from "node:child_process";
 const TOKEN = process.env.MEMOS_AGENT_TOKEN ?? "syn_demo_operator_0000000000000000"; // memos-allow-example
 const PROJECT = process.env.MEMOS_PROJECT_ID ?? "project.demo";
 
-const child = spawn("npx", ["tsx", "sdk/memos-mcp/src/server.ts"], {
+const child = spawn("node", ["sdk/memos-mcp/bin/cli.mjs"], {
   stdio: ["pipe", "pipe", "pipe"],
   env: { ...process.env, MEMOS_AGENT_TOKEN: TOKEN, MEMOS_PROJECT_ID: PROJECT },
-  shell: process.platform === "win32",
-});
+  });
 
 let buf = "";
 const pending = new Map();
