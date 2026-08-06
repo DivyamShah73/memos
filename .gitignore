@@ -49,3 +49,4 @@ tmp/
 # harness report cost cache (local only)
 .harness/
 harness-report.html
+harness.html
