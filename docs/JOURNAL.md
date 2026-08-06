@@ -642,3 +642,23 @@ of done — exits 0 having run nothing, and the `gate` skill reports `SKIPPED`, 
 `claim-without-evidence` records intent, not exit code, because `PreToolUse` precedes execution; and
 nothing asserts that a future `claude-code-action` still honours project hooks. On branch
 `feat/agent-harness`, **uncommitted**, for review.
+
+## Invariant 5 gets teeth: `applies_to` rejects id-shaped tags
+
+`learningItemSchema.applies_to` accepted any non-empty string, so `applies_to: ["project.acme"]` was
+a legal write — a learning tagged with the very identifier that re-silos it, which is the one thing
+the shared store exists to prevent. Now each tag is trimmed + lowercased and any `project.`/`team.`/
+`agent.` prefix is rejected, in the Zod schema *and* re-asserted in the handler via
+`assertAppliesTo` in `_evidence.ts`, following the evidence gate's existing defense-in-depth shape.
+Order matters and is tested: normalize *then* match, so `"  Project.Acme  "` can't dodge the check.
+Scope stayed narrow — only these three unambiguous id shapes; judging whether `acme-billing` is a
+product name remains the downstream tag-hygiene critic's job. Three mutations were run by hand to
+confirm the tests bite: dropping the handler call, narrowing the regex to `project.` only, and
+removing the transform each failed exactly the test that should catch it. Two things worth carrying
+forward: a handler-side `.map(normalizeAppliesTo)` was written and then deleted, because the schema
+transform already makes storage canonical on every dispatch path and the line survived deletion by
+every test — the *rejection* needs two layers, canonical storage doesn't; and `learning.query` still
+filters on raw caller input (`arrayOverlaps`), so a mixed-case query no longer matches a
+now-lowercased stored tag. Nothing in-repo regresses (154/154 green) since the convention was already
+lowercase, but the read side is left deliberately untouched and written down in `.agent/not-done.md`
+rather than quietly fixed. Gates: **API suite 154/154, typecheck clean.**

@@ -107,7 +107,7 @@ curl -s -X POST $API/v1/intent/checkin -H "authorization: Bearer $TOK" \
 - **Auth:** bearer; agent scoped to `project_id`.
 - **Input:** `{ "project_id": string, "bd_id": string, "learnings": [{ "claim": string, "applies_to": string[], "confidence": …, "non_obvious_marker"?: string, "evidence_artifact_id"?: uuid }] }`
 - **Returns:** `{ "learning_ids": uuid[] }`
-- **Notes:** at `confidence ≥ medium`, BOTH an `evidence_artifact_id` AND a `non_obvious_marker` (≥15 chars) are required (400 otherwise). `applies_to` are problem-domain tags, not project names.
+- **Notes:** at `confidence ≥ medium`, BOTH an `evidence_artifact_id` AND a `non_obvious_marker` (≥15 chars) are required (400 otherwise). `applies_to` are problem-domain tags, not project names: tags are trimmed + lowercased on write, and a tag carrying an id prefix (`project.`/`team.`/`agent.`) is rejected (400).
 
 ```bash
 # upload evidence, then record an evidence-backed fact

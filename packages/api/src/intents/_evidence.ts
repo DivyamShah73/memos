@@ -3,6 +3,7 @@
  * drift. NOT a test (underscore prefix). Runs inside the caller's withScope transaction.
  */
 import { and, eq } from "drizzle-orm";
+import { isIdShapedTag } from "@memos/shared";
 import type { ScopedTx } from "../core/scope.js";
 import { artifacts, workflowRuns } from "../db/schema.js";
 
@@ -44,6 +45,24 @@ export type EvidenceResult = { kind: "validation"; message: string } | { kind: "
  * cross-tenant cite would bind silently or 500. The 0-rows path covers non-existent +
  * cross-tenant (RLS-invisible) + wrong-bd_id in one query.
  */
+/**
+ * Invariant 5, re-asserted in the handler: no `applies_to` tag may be a `project.`/`team.`/
+ * `agent.` id. Defense in depth over the Zod schema, which is the same posture as the evidence
+ * gate — a handler reached by any path other than dispatch must still refuse to silo a learning.
+ */
+export function assertAppliesTo(items: { applies_to: string[] }[]): EvidenceResult {
+  for (let i = 0; i < items.length; i++) {
+    const bad = items[i].applies_to.find(isIdShapedTag);
+    if (bad !== undefined) {
+      return {
+        kind: "validation",
+        message: `item ${i}: applies_to tag "${bad}" must be a problem-domain term, not a project/team/agent id`,
+      };
+    }
+  }
+  return { kind: "ok" };
+}
+
 export async function assertEvidence(
   tx: ScopedTx,
   opts: { projectId: string; bdId: string; items: EvidenceItem[]; requireMarker?: boolean },
