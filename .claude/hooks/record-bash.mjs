@@ -19,8 +19,7 @@ const TEST_RUN =
 
 /** Vitest/tsc/eslint failure signatures, for when no structured status is available. */
 const FAILURE_TEXT =
-  /\b(\d+\s+failed|test(s)?\s+failed|FAIL\b|✗|error TS\d+|✖\s+\d+\s+problems?\s+\(\s*[1-9])/;
-
+  /\b([1-9]\d*\s+failed|test(s)?\s+failed|FAIL\b|✗|error TS\d+|✖\s+\d+\s+problems?\s+\(\s*[1-9])/;
 /**
  * Returns true (passed), false (failed), or null (ran, can't tell). Checks structured fields first —
  * an exit code is authoritative — and only falls back to text when there is none.

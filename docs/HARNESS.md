@@ -328,13 +328,14 @@ exists to prevent.
   enrolled agent uses — and injects what the fleet already knows. Strictly best-effort: 1.5s timeout,
   and every failure path (no config, server down, token rejected) falls back to the journal silently,
   because a `SessionStart` hook must never depend on a server being up.
-- **`record-bash.mjs` counts a green run as red.** Its text fallback matches `\d+\s+failed`, which
-  matches the string `0 failed` — so `harness_hooks.sh` printing *"61 passed, 0 failed"* is recorded
-  as a failure, and the `claim-without-evidence` gate then blocks the turn on a suite that passed.
-  Found by the gate firing on a fully green verification run. Fix is `\b[1-9]\d*\s+failed`. Until
-  then the "runs flagged non-green" figure in `harness-report` is not trustworthy and is labelled as
-  such — a wrong number is worse than no number, especially in a report whose whole purpose is
-  replacing claims with evidence.
+- ~~**`record-bash.mjs` counts a green run as red.**~~ **Closed.** Its text fallback matched
+  `\d+\s+failed`, which matches the string `0 failed` — so `harness_hooks.sh` printing
+  *"61 passed, 0 failed"* was recorded as a failure, and the `claim-without-evidence` gate then
+  blocked the turn on a suite that had passed. It fired three times on fully green runs before the
+  cause was found. Now `\b[1-9]\d*\s+failed`, verified behaviourally: green output records `null`
+  ("ran, no failure detected") and only a non-zero count records `false`. Note that a text-derived
+  pass is still `null` rather than `true` — absence of a failure marker is not proof of success, and
+  the fallback deliberately claims no more than it knows.
 - **The eval worktrees are isolated on disk but share the database.** `git worktree` gives each
   fixture its own checkout, which is enough for the critics — they read code. But an early run of the
   `test-adversary` fixture ran `vitest` from inside the worktree, which connected to the *same*
