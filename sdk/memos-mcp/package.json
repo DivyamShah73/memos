@@ -1,11 +1,11 @@
 {
-  "name": "memos-mcp",
+  "name": "memos-os-mcp",
   "version": "0.1.0",
   "description": "MemOS for MCP-capable coding agents: query your organisation's accumulated learnings, and arrive with them preloaded.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "memos-mcp": "bin/cli.mjs"
+    "memos-os-mcp": "bin/cli.mjs"
   },
   "files": [
     "bin",

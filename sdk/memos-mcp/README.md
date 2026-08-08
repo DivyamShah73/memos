@@ -1,10 +1,10 @@
-# memos-mcp
+# memos-os-mcp
 
 Give your coding agent access to your organisation's accumulated engineering knowledge — and make it
 actually arrive with that knowledge, rather than merely being able to ask for it.
 
 ```bash
-npx memos-mcp init
+npx memos-os-mcp init
 ```
 
 ## Setup, end to end
@@ -31,7 +31,7 @@ export MEMOS_PROJECT_ID=project.your-project
 **3. Wire it in.**
 
 ```bash
-npx memos-mcp init
+npx memos-os-mcp init
 ```
 
 That registers the MCP server in `.mcp.json` and installs a `SessionStart` hook. Restart your agent.
@@ -78,5 +78,5 @@ Tuning: `MEMOS_PRELOAD_LIMIT` (default 8) controls how many learnings are inject
 ## Running the server directly
 
 ```bash
-npx memos-mcp          # stdio JSON-RPC; this is what your agent invokes
+npx memos-os-mcp          # stdio JSON-RPC; this is what your agent invokes
 ```

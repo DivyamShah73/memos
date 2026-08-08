@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * memos-mcp — MemOS for any MCP-capable coding agent.
+ * memos-os-mcp — MemOS for any MCP-capable coding agent.
  *
- *   npx memos-mcp init     wire it into this repo (MCP server + session preload)
- *   npx memos-mcp          run the server (what the agent invokes; stdio)
+ *   npx memos-os-mcp init     wire it into this repo (MCP server + session preload)
+ *   npx memos-os-mcp          run the server (what the agent invokes; stdio)
  *
  * Self-contained on purpose. The repo's server.ts imports @memos/agent, which is a workspace package
  * whose `main` points at TypeScript source — fine inside the monorepo, unpublishable outside it,
@@ -63,7 +63,7 @@ function init() {
   mcp.mcpServers ??= {};
   mcp.mcpServers.memos = {
     command: "npx",
-    args: ["-y", "memos-mcp"],
+    args: ["-y", "memos-os-mcp"],
     env: {
       MEMOS_API_URL: "${MEMOS_API_URL}",
       MEMOS_AGENT_TOKEN: "${MEMOS_AGENT_TOKEN}",
@@ -99,7 +99,7 @@ function init() {
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 
-  console.log(`memos-mcp: wired into ${cwd}
+  console.log(`memos-os-mcp: wired into ${cwd}
 
   .mcp.json                        -> memos server registered (4 tools)
   .claude/hooks/memos-preload.mjs  -> installed
@@ -123,7 +123,7 @@ actually arrive with that memory, instead of only being able to ask for it.
 async function serve() {
   if (!TOKEN) {
     // stderr, never stdout: stdout is the JSON-RPC channel and a stray byte corrupts the protocol.
-    process.stderr.write("memos-mcp: MEMOS_AGENT_TOKEN is not set. Enroll an agent first.\n");
+    process.stderr.write("memos-os-mcp: MEMOS_AGENT_TOKEN is not set. Enroll an agent first.\n");
     process.exit(1);
   }
 
@@ -195,6 +195,6 @@ const cmd = process.argv[2];
 if (cmd === "init") init();
 else if (!cmd || cmd === "serve") await serve();
 else {
-  process.stderr.write(`memos-mcp: unknown command "${cmd}". Use \`init\` or no argument to serve.\n`);
+  process.stderr.write(`memos-os-mcp: unknown command "${cmd}". Use \`init\` or no argument to serve.\n`);
   process.exit(1);
 }

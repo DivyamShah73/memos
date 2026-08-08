@@ -2,7 +2,7 @@
 /**
  * SessionStart hook — pulls the org's learnings into the session before the agent does anything.
  *
- * Installed by `npx memos-mcp init`.
+ * Installed by `npx memos-os-mcp init`.
  *
  * Why this exists, and why the MCP tools alone are not enough:
  *
